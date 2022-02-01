@@ -1,0 +1,18 @@
+random_seed: 0
+input_path: /run/media/hearth/passport/ml_phd/NeurIPS2021-traffic4cast/data/raw/
+output_path: ../data/
+
+train_set:
+    cities:
+    - ANTWERP
+    - BANGKOK
+    - BARCELONA
+    - BERLIN
+    - CHICAGO
+    - ISTANBUL
+    - MELBOURNE
+    count: 10
+
+val_set:
+    cities: MOSCOW
+    count: 10
