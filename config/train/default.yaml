@@ -1,0 +1,4 @@
+random_seed: 40
+
+resume_checkpoint: None
+device: cuda

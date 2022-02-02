@@ -1,6 +1,7 @@
 random_seed: 0
-input_path: /run/media/hearth/passport/ml_phd/NeurIPS2021-traffic4cast/data/raw/
-output_path: ../data/
+input_path: /home/shehel/ml/NeurIPS2021-traffic4cast/data/raw/
+name: second
+output_path: ../data/raw
 
 train_set:
     cities:
@@ -11,8 +12,8 @@ train_set:
     - CHICAGO
     - ISTANBUL
     - MELBOURNE
-    count: 10
+    count: 3
 
 val_set:
     cities: MOSCOW
-    count: 10
+    count: 5
