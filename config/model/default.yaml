@@ -1,0 +1,23 @@
+_target_: src.models.model.Model
+network:
+    _target_: src.models.unet.UNet
+    in_channels: 96 # 12*8+9
+    n_classes: 48 # 6*8
+    depth: 5
+    wf: 6
+    padding: True
+    up_mode: 'upconv'
+    batch_norm: True
+
+dataset:
+  _target_: src.data.dataset.T4CDataset
+  root_dir: "/home/shehel/ml/traffic_forecasting/data/raw/default"
+  use_npy: False
+  limit: 40
+  transform:
+    _target_: src.data.transform.UNetTransform
+    stack_time: True
+    pre_batch_dim: False
+    post_batch_dim: True
+    crop_pad: [6,6,1,0]
+    num_channels: 8

@@ -1,4 +1,15 @@
 random_seed: 40
 
-resume_checkpoint: None
-device: cuda
+train_fraction: 0.8
+val_fraction: 0.2
+resume_checkpoint: null
+device: 'cuda'
+epochs: 5
+data_parallel: True
+optimizer:
+  lr: 0.00004
+  weight_decay: 0.0001
+dataloader:
+  shuffle: True
+  batch_size: 1
+  num_workers: 4

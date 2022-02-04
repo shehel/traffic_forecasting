@@ -8,9 +8,11 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from competition.competition_constants import MAX_TEST_SLOT_INDEX
-from competition.prepare_test_data.prepare_test_data import prepare_test
-from util.h5_util import load_h5_file
+from src.competition.competition_constants import MAX_TEST_SLOT_INDEX
+from src.competition.prepare_test_data.prepare_test_data import prepare_test
+from src.common.h5_util import load_h5_file
+
+import pdb
 
 
 class T4CDataset(Dataset):
@@ -76,8 +78,8 @@ class T4CDataset(Dataset):
         output_data = self._to_torch(output_data)
 
         if self.transform is not None:
-            input_data = self.transform(input_data)
-            output_data = self.transform(output_data)
+            input_data = self.transform.pre_transform(input_data)
+            output_data = self.transform.pre_transform(output_data)
 
         return input_data, output_data
 
