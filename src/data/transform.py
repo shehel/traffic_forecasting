@@ -5,6 +5,7 @@ from typing import Optional, Tuple
 from src.data.data_transform import DataTransform
 
 
+import pdb
 class UNetTransform(DataTransform):
     """Pre-processor and post-processor to convert T4C data to
     be compatible with Unet
@@ -44,12 +45,13 @@ class UNetTransform(DataTransform):
             data = torch.unsqueeze(data, 0)
 
         if self.stack_time:
-            data = self.stack_on_time(data)
+            data = self.stack_on_time(data, batch_dim=True)
         if self.crop_pad is not None:
             zeropad2d = torch.nn.ZeroPad2d(self.crop_pad)
             data = zeropad2d(data)
         if not self.pre_batch_dim:
             data = torch.squeeze(data, 0)
+
         return data
 
     def post_transform(
@@ -70,21 +72,21 @@ class UNetTransform(DataTransform):
             bottom = height - bottom
             data = data[:, :, top:bottom, left:right]
         if self.stack_time:
-            data = self.unstack_on_time(data)
+            data = self.unstack_on_time(data, batch_dim=True)
         if not self.post_batch_dim:
             data = torch.squeeze(data, 0)
         return data
 
-    def stack_on_time(self, data: torch.Tensor):
+    def stack_on_time(self, data: torch.Tensor, batch_dim: bool = False):
         """
         `(k, 12, 495, 436, 8) -> (k, 12 * 8, 495, 436)`
         """
-        _, num_time_steps, height, width, num_channels = data.shape
 
-        if not self.pre_batch_dim:
+        if not batch_dim:
             # `(12, 495, 436, 8) -> (1, 12, 495, 436, 8)`
             data = torch.unsqueeze(data, 0)
 
+        _, num_time_steps, height, width, num_channels = data.shape
         # (k, 12, 495, 436, 8) -> (k, 12, 8, 495, 436)
         data = torch.moveaxis(data, 4, 2)
 
@@ -94,7 +96,7 @@ class UNetTransform(DataTransform):
                                     height,
                                     width))
 
-        if not self.pre_batch_dim:
+        if not batch_dim:
             # `(1, 12, 495, 436, 8) -> (12, 495, 436, 8)`
             data = torch.squeeze(data, 0)
         return data
@@ -104,7 +106,7 @@ class UNetTransform(DataTransform):
         `(k, 12 * 8, 495, 436) -> (k, 12, 495, 436, 8)`
         """
         _, _, height, width = data.shape
-        if not self.post_batch_dim:
+        if not batch_dim:
             # `(12, 495, 436, 8) -> (1, 12, 495, 436, 8)`
             data = torch.unsqueeze(data, 0)
 
@@ -113,13 +115,13 @@ class UNetTransform(DataTransform):
         data = torch.reshape(data, (data.shape[0],
                                     num_time_steps,
                                     self.num_channels,
-                                    height + self.crop_pad[0] + self.crop_pad[1],
-                                    width + self.crop_pad[2] + self.crop_pad[3]))
+                                    height,
+                                    width))
 
         # (k, 12, 8, 495, 436) -> (k, 12, 495, 436, 8)
         data = torch.moveaxis(data, 2, 4)
 
-        if not self.post_batch_dim:
+        if not batch_dim:
             # `(1, 12, 495, 436, 8) -> (12, 495, 436, 8)`
             data = torch.squeeze(data, 0)
         return data

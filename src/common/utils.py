@@ -54,8 +54,12 @@ load_envs()
 
 # set the cwd to the project root
 PROJECT_ROOT: Path = Path(get_env("PROJECT_ROOT"))
+DATA_PATH: Path = Path(get_env("DATA_PATH"))
 assert (
     PROJECT_ROOT.exists()
 ), "You must configure the PROJECT_ROOT environment variable in a .env file!"
+assert (
+    DATA_PATH.exists()
+), "You must configure the DATA_PATH environment variable in a .env file!"
 
 os.chdir(PROJECT_ROOT)

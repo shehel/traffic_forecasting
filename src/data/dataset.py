@@ -23,6 +23,8 @@ class T4CDataset(Dataset):
         limit: Optional[int] = None,
         transform: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
         use_npy: bool = False,
+        sampling_height: int = 1,
+        sampling_width: int = 1
     ):
         """torch dataset from training data.
         Parameters
@@ -47,6 +49,8 @@ class T4CDataset(Dataset):
                 self.file_filter = "**/training_npy/*.npy"
         self.transform = transform
         self._load_dataset()
+        self.sampling_height = sampling_height
+        self.sampling_width = sampling_width
 
     def _load_dataset(self):
         self.files = list(Path(self.root_dir).rglob(self.file_filter))
@@ -59,8 +63,8 @@ class T4CDataset(Dataset):
 
     def __len__(self):
         size_240_slots_a_day = len(self.files) * MAX_TEST_SLOT_INDEX
-        if self.limit is not None:
-            return min(size_240_slots_a_day, self.limit)
+        #if self.limit is not None:
+        #    return min(size_240_slots_a_day, self.limit)
         return size_240_slots_a_day
 
     def __getitem__(self, idx: int) -> Tuple[Any, Any]:
@@ -71,6 +75,7 @@ class T4CDataset(Dataset):
         start_hour = idx % MAX_TEST_SLOT_INDEX
 
         two_hours = self._load_h5_file(self.files[file_idx], sl=slice(start_hour, start_hour + 12 * 2 + 1))
+        two_hours = two_hours[:,::sampling_height,::sampling_width,:]
 
         input_data, output_data = prepare_test(two_hours)
 

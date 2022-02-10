@@ -79,7 +79,7 @@ target/
 /data/
 
 # excluse hydra output dir
-output/
+outputs/
 
 # Mac OS-specific storage files
 .DS_Store

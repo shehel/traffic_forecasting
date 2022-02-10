@@ -14,15 +14,16 @@ import binascii
 import logging
 import os
 import sys
+import random
+import tqdm
 from pathlib import Path
 from typing import Optional
+from src.common.utils import PROJECT_ROOT, DATA_PATH
 
 import numpy as np
 import torch
 import torch.nn.functional as F  # noqa
 import torch.optim as optim
-#import torch_geometric
-import tqdm
 from ignite.contrib.handlers import TensorboardLogger
 from ignite.contrib.handlers.tensorboard_logger import GradsHistHandler
 from ignite.contrib.handlers.tqdm_logger import ProgressBar
@@ -52,12 +53,21 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from hydra.utils import instantiate
 
-from src.common.utils import PROJECT_ROOT
 from src.models.model import Model
 
 from src.common.utils import t4c_apply_basic_logging_config
 
 from clearml import Task
+from clearml import Dataset
+
+def reset_seeds(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    os.environ['PYTHONHASHSEED'] = str(seed)
 
 def run_model(
     model: Model,
@@ -70,11 +80,13 @@ def run_model(
     logging.info("train/dev split")
     full_dataset_size = len(model.dataset)
 
+
     effective_dataset_size = full_dataset_size
     if model.dataset.limit is not None:
         effective_dataset_size = min(full_dataset_size, model.dataset.limit)
     indices = list(range(full_dataset_size))
-    np.random.seed(cfg.random_seed)
+
+
     np.random.shuffle(indices)
     assert np.isclose(cfg.train_fraction + cfg.val_fraction, 1.0)
     num_train_items = max(int(np.floor(cfg.train_fraction * effective_dataset_size)), cfg.dataloader.batch_size)
@@ -116,11 +128,12 @@ def run_model(
 
     model.network = model.network.to(cfg.device)
 
+
     # Loss
     loss = F.mse_loss
     train_ignite(cfg.device, cfg.epochs, loss, optimizer, train_loader, val_loader, model.network)
     logging.info("End training of train_model %s on %s for %s epochs", model.network, cfg.device, cfg.epochs)
-    return model, device
+    return model
 
 
 def train_ignite(device, epochs, loss, optimizer, train_loader, val_loader, train_model):
@@ -140,7 +153,7 @@ def train_ignite(device, epochs, loss, optimizer, train_loader, val_loader, trai
     @trainer.on(Events.EPOCH_STARTED)  # noqa
     def log_epoch_start(engine: Engine):
         logging.info(f"Started epoch {engine.state.epoch}")
-        # logging.info(system_status())
+        # logging.info(system_status()
 
     @trainer.on(Events.EPOCH_COMPLETED)  # noqa
     def log_epoch_summary(engine: Engine):
@@ -186,10 +199,13 @@ def train_ignite(device, epochs, loss, optimizer, train_loader, val_loader, trai
 @hydra.main(config_path=str(PROJECT_ROOT/"config"), config_name="default")
 def main(cfg: DictConfig):
 
-    task = Task.init(project_name='t4c', task_name='train_model')
+    reset_seeds(cfg.train.random_seed)
+    #sd = Dataset.get(dataset_project="t4c", dataset_name="default").get_mutable_local_copy("data/raw")
+    #task = Task.init(project_name='t4c', task_name='train_model')
     t4c_apply_basic_logging_config()
 
-    model = instantiate(cfg.model)
+    model = instantiate(cfg.model, dataset={"root_dir":
+                              DATA_PATH/cfg.model.dataset.root_dir})
     logging.info("Model instantiated.")
 
     # competitions = args.competitions
@@ -208,7 +224,7 @@ def main(cfg: DictConfig):
 
     logging.info("Going to run train_model.")
     # logging.info(system_status())
-    _, device = run_model(
+    run_model(
         model = model, cfg = cfg.train)
 
     # for competition in competitions:

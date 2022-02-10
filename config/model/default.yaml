@@ -11,13 +11,16 @@ network:
 
 dataset:
   _target_: src.data.dataset.T4CDataset
-  root_dir: "/home/shehel/ml/traffic_forecasting/data/raw/default"
+  root_dir: "t4c_1"
+    #limit: 200
   use_npy: False
-  limit: 40
+  # limit: 200
+  sampling_height: 4
+  sampling_width: 4
   transform:
     _target_: src.data.transform.UNetTransform
     stack_time: True
     pre_batch_dim: False
     post_batch_dim: True
-    crop_pad: [6,6,1,0]
+    crop_pad: [2,1,2,2] #[6,6,1,0]
     num_channels: 8
