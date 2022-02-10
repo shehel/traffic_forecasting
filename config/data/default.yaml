@@ -1,4 +1,4 @@
-random_seed: 0
+random_seed: 123
 input_path: /home/shehel/ml/NeurIPS2021-traffic4cast/data/raw/
 name: second
 output_path: ../data/raw
