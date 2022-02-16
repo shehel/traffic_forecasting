@@ -18,7 +18,8 @@ import random
 import tqdm
 from pathlib import Path
 from typing import Optional
-from src.common.utils import PROJECT_ROOT, DATA_PATH
+from src.common.utils import PROJECT_ROOT, DATA_PATH, load_envs()
+load_envs()
 
 import numpy as np
 import torch

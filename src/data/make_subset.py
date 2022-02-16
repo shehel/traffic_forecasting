@@ -12,6 +12,9 @@ from clearml import Task
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
+from src.common.utils import load_envs
+load_envs()
+
 from src.common.utils import PROJECT_ROOT
 
 # TODO change logger to common.util
