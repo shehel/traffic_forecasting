@@ -27,9 +27,8 @@ def main(cfg: DictConfig) -> None:
     random.seed(cfg.random_seed)
 
     input_path = Path(cfg.input_path)
-    output_path = Path(cfg.output_path)
     # uses the name of the yaml file as dataset folder name
-    output_path = output_path/cfg.name
+    output_path = PROJECT_ROOT/"data"/"raw"/cfg.name
     if os.path.exists(output_path):
         logger.info('Folder exists. Exiting!')
         return

@@ -1,3 +1,7 @@
+import sys
+import argparse
+import os
+
 from clearml import Task
 from clearml.automation import PipelineController
 
@@ -14,16 +18,30 @@ def post_execute_cb(a_pipeline, a_node):
     # if we need the actual executed Task: Task.get_task(task_id=a_node.executed)
     return
 
-pipe = PipelineController('T4C pipeline', 't4c', '0.0.1')
-pipe.set_default_execution_queue('services')
+def main(args):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data_dir", type=str, default=None,
+                       required=True, help="absolute path of where the raw T4C dataset resides")
+    args = parser.parse_args(args)
+    cwd = os.getcwd()
 
-# TODO if dataset is already uploaded, don't go through subset creation
-pipe.add_step(name='stage_data', base_task_project='t4c', base_task_name='subset_creation',
-              pre_execute_callback = pre_execute_cb, post_execute_callback = post_execute_cb)
-pipe.add_step(name='train', base_task_project='t4c', base_task_name='train_model',
-              pre_execute_callback = pre_execute_cb, post_execute_callback = post_execute_cb)
+    env_file = open(".env","w+")
+    env_file.write("export PROJECT_ROOT=\""+cwd+"\"\n")
+    env_file.write("export DATA_PATH=\""+args.data_dir+"\"")
+    env_file.close()
 
-#pipe.start_locally()
+    pipe = PipelineController('T4C pipeline', 't4c', '0.0.1')
+    pipe.set_default_execution_queue('services')
 
-pipe.start()
-print('done')
+    # TODO if dataset is already uploaded, don't go through subset creation
+    pipe.add_step(name='stage_data', base_task_project='t4c', base_task_name='subset_creation')
+    pipe.add_step(name='train', base_task_project='t4c', base_task_name='train_model')
+
+
+    pipe.start_locally()
+
+    #pipe.start()
+    print('done')
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
