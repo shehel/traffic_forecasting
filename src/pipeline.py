@@ -18,19 +18,12 @@ def post_execute_cb(a_pipeline, a_node):
 pipe = PipelineController('T4C pipeline', 't4c', '0.0.2')
 pipe.set_default_execution_queue('services')
 
-pipe.add_parameter(
-     name='data_path',
-     description='path to raw t4c data',
-     default='/home/shehel/ml/NeurIPS2021-traffic4cast/data/raw/'
-)
-pipe.add_step(name='set_env', base_task_project='t4c', base_task_name='create_env',
-              parameter_override={'Args/data_dir':'${pipeline.data_path}'})
 # TODO if dataset is already uploaded, don't go through subset creation
 pipe.add_step(name='stage_data', base_task_project='t4c', base_task_name='subset_creation',
-                    task_overrides={"script.version_num":"347e7e5c2941c48063ca9bd4b07d056fcd44123a","script.branch": "master"})
-pipe.add_step(name='train', base_task_project='t4c', base_task_name='train_model')
-
-
+                    task_overrides={"script.version_num":"3c1b660826c90a55a6c246c9f5ca18982ea2acff","script.branch": "master"})
+pipe.add_step(name='train', base_task_project='t4c', base_task_name='train_model',)
+              #task_overrides={"script.version_num":"3c1b660826c90a55a6c246c9f5ca18982ea2acff","script.branch": "master"})
+# YAML override: parameter_override={'Args/overrides': '[the_hydra_key={}]'.format(a_new_value)})
 pipe.start_locally()
 
 #pipe.start()

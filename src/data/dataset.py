@@ -75,7 +75,7 @@ class T4CDataset(Dataset):
         start_hour = idx % MAX_TEST_SLOT_INDEX
 
         two_hours = self._load_h5_file(self.files[file_idx], sl=slice(start_hour, start_hour + 12 * 2 + 1))
-        two_hours = two_hours[:,::sampling_height,::sampling_width,:]
+        two_hours = two_hours[:,::self.sampling_height,::self.sampling_width,:]
 
         input_data, output_data = prepare_test(two_hours)
 

@@ -11,7 +11,7 @@ network:
 
 dataset:
   _target_: src.data.dataset.T4CDataset
-  root_dir: "t4c_1"
+  root_dir: "third"
     #limit: 200
   use_npy: False
   # limit: 200

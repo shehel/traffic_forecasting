@@ -4,7 +4,7 @@ train_fraction: 0.9
 val_fraction: 0.1
 resume_checkpoint: null
 device: 'cuda'
-epochs: 5
+epochs: 1
 data_parallel: True
 optimizer:
   lr: 1e-4

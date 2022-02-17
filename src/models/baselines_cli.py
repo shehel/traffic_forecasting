@@ -18,8 +18,7 @@ import random
 import tqdm
 from pathlib import Path
 from typing import Optional
-from src.common.utils import PROJECT_ROOT, DATA_PATH, load_envs()
-load_envs()
+import pdb
 
 import numpy as np
 import torch
@@ -197,23 +196,30 @@ def train_ignite(device, epochs, loss, optimizer, train_loader, val_loader, trai
     pbar.close()
 
 
-@hydra.main(config_path=str(PROJECT_ROOT/"config"), config_name="default")
+@hydra.main(config_path=str("../../config"), config_name="default")
 def main(cfg: DictConfig):
 
     reset_seeds(cfg.train.random_seed)
     #sd = Dataset.get(dataset_project="t4c", dataset_name="default").get_mutable_local_copy("data/raw")
-    #task = Task.init(project_name='t4c', task_name='train_model')
+    task = Task.init(project_name='t4c', task_name='train_model')
     t4c_apply_basic_logging_config()
 
-    model = instantiate(cfg.model, dataset={"root_dir":
-                              DATA_PATH/cfg.model.dataset.root_dir})
+    # Uses cfg.name to fetch clearml dataset which is used to instantiate
+    # dataset object with a proper path.
+
+    try:
+        root_dir = Dataset.get(dataset_project="t4c", dataset_name=cfg.model.dataset.root_dir).get_local_copy()
+    except:
+        logging.info("Could not find dataset in clearml server. Exiting!")
+        return
+
+    model = instantiate(cfg.model, dataset={"root_dir":root_dir})
     logging.info("Model instantiated.")
 
     # competitions = args.competitions
 
     # Data set
     # TODO Removed untar operation and geometric datasets
-
     logging.info("Dataset has size %s", len(model.dataset))
     assert len(model.dataset) > 0
 
