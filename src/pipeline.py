@@ -1,7 +1,3 @@
-import sys
-import argparse
-import os
-
 from clearml import Task
 from clearml.automation import PipelineController
 
@@ -18,30 +14,24 @@ def post_execute_cb(a_pipeline, a_node):
     # if we need the actual executed Task: Task.get_task(task_id=a_node.executed)
     return
 
-def main(args):
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--data_dir", type=str, default=None,
-                       required=True, help="absolute path of where the raw T4C dataset resides")
-    args = parser.parse_args(args)
-    cwd = os.getcwd()
 
-    env_file = open(".env","w+")
-    env_file.write("export PROJECT_ROOT=\""+cwd+"\"\n")
-    env_file.write("export DATA_PATH=\""+args.data_dir+"\"")
-    env_file.close()
+pipe = PipelineController('T4C pipeline', 't4c', '0.0.2')
+pipe.set_default_execution_queue('services')
 
-    pipe = PipelineController('T4C pipeline', 't4c', '0.0.1')
-    pipe.set_default_execution_queue('services')
-
-    # TODO if dataset is already uploaded, don't go through subset creation
-    pipe.add_step(name='stage_data', base_task_project='t4c', base_task_name='subset_creation')
-    pipe.add_step(name='train', base_task_project='t4c', base_task_name='train_model')
+pipe.add_parameter(
+     name='data_path',
+     description='path to raw t4c data',
+     default='/home/shehel/ml/NeurIPS2021-traffic4cast/data/raw/'
+)
+pipe.add_step(name='set_env', base_task_project='t4c', base_task_name='create_env',
+              parameter_override={'Args/data_dir':'${pipeline.data_path}'})
+# TODO if dataset is already uploaded, don't go through subset creation
+pipe.add_step(name='stage_data', base_task_project='t4c', base_task_name='subset_creation',
+                    task_overrides={"script.version_num":"347e7e5c2941c48063ca9bd4b07d056fcd44123a","script.branch": "master"})
+pipe.add_step(name='train', base_task_project='t4c', base_task_name='train_model')
 
 
-    pipe.start_locally()
+pipe.start_locally()
 
-    #pipe.start()
-    print('done')
-
-if __name__ == "__main__":
-    main(sys.argv[1:])
+#pipe.start()
+print('done')

@@ -4,6 +4,8 @@ from pathlib import Path
 import glob
 import random
 import os
+print(os.getcwd())
+print(os.listdir(os.getcwd()))
 import shutil
 
 from clearml import Dataset
@@ -15,7 +17,7 @@ from omegaconf import DictConfig, OmegaConf
 from src.common.utils import load_envs
 load_envs()
 
-from src.common.utils import PROJECT_ROOT
+from src.common.utils import PROJECT_ROOT, DATA_PATH
 
 # TODO change logger to common.util
 
@@ -29,7 +31,7 @@ def main(cfg: DictConfig) -> None:
 
     random.seed(cfg.random_seed)
 
-    input_path = Path(cfg.input_path)
+    input_path = DATA_PATH
     # uses the name of the yaml file as dataset folder name
     output_path = PROJECT_ROOT/"data"/"raw"/cfg.name
     if os.path.exists(output_path):
