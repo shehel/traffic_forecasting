@@ -1,5 +1,5 @@
 random_seed: 123
-name: third
+name: second
 input_path: /home/shehel/ml/NeurIPS2021-traffic4cast/data/raw
 
 train_set:

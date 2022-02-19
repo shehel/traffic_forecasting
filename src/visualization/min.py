@@ -3,7 +3,7 @@ import os
 import pdb
 from tqdm import tqdm
 import numpy as np
-
+import sys
 import torch
 from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader
@@ -14,6 +14,16 @@ from src.data.transform import UNetTransform
 import tensorly as tl
 from tensorly.decomposition import tucker
 from sklearn.metrics import mean_squared_error
+
+def reset_seeds(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    os.environ['PYTHONHASHSEED'] = str(seed)
+
 
 def get_recon_error(tensor, factors):
     reduc = tl.tenalg.multi_mode_dot(tensor, factors, transpose=True)
@@ -39,7 +49,8 @@ case:
 - avg val tensor decomposition and random val tensor reconstruction
 """
 def main():
-    task = Task.init(project_name="t4c_tensor_decomp", task_name="Reconstruction error_min")
+    reset_seeds(123)
+    task = Task.init(project_name="t4c_tensor_decomp", task_name="Reconstruction error")
     logger = task.get_logger()
     args = {
         'trainset_dir': 'third',
@@ -61,13 +72,13 @@ def main():
     task.connect(args)
     print ('Arguments: {}'.format(args))
 
-    #try:
-    trainset_dir = Dataset.get(dataset_project="t4c", dataset_name=args['trainset_dir']).get_local_copy()
-    valset_dir = Dataset.get(dataset_project="t4c", dataset_name=args['valset_dir']).get_local_copy()
-    print ("Dataset found.")
-    #except:
-    #    print("Unable to load dataset. Exiting!")
-    #    sys.exit()
+    try:
+        trainset_dir = Dataset.get(dataset_project="t4c", dataset_name=args['trainset_dir']).get_local_copy()
+        valset_dir = Dataset.get(dataset_project="t4c", dataset_name=args['valset_dir']).get_local_copy()
+        print ("Dataset found.")
+    except:
+        print("Unable to load dataset. Exiting!")
+        sys.exit()
 
     # TODO Transform can be done better in config
     transform = UNetTransform(stack_time=True, pre_batch_dim=False, post_batch_dim=True, crop_pad=[6,6,1,0], num_channels=8)
@@ -86,22 +97,47 @@ def main():
 
     print ("Image dimension: %sx%sx%s" % (dims[0], dims[1], dims[2]))
 
+    train_avg = np.zeros(dims)
     val_avg = np.zeros(dims_v)
+    for idx, sample in enumerate(train_loader):
+        b_avg = torch.mean(sample[args['labels']], 0).numpy()
+        train_avg += b_avg
+        if idx == args['iter']:
+            break
+    t_sample = sample[args['labels']][0].numpy()
+
+    train_avg = train_avg/(idx+1)
+
     for idx, sample in enumerate(val_loader):
         b_avg = torch.mean(sample[args['labels']], 0).numpy()
         val_avg += b_avg
         if idx == args['iter']:
             break
     v_sample = sample[args['labels']][-1].numpy()
-    #reset_seeds(123)
 
-    #val_avg = val_avg/(idx+1)
-    tten_val = tucker(val_avg, rank=[32,dims[1],dims[2]])
+    val_avg = val_avg/(idx+1)
 
-    factors_val = tten_val[1]
-    reduc = tl.tenalg.multi_mode_dot(v_sample, factors_val, transpose=True)
-    recon = tl.tenalg.multi_mode_dot(reduc, factors_val, transpose=False)
-    print(mean_squared_error(v_sample.flatten(), recon.flatten()))
+    errors_tavg_tavg = []
+    errors_tavg_train = []
+    errors_tavg_vavg = []
+    errors_tavg_val = []
+    errors_vavg_vavg = []
+    errors_vavg_val = []
+    pts = list(range(args['step_size'], dims[args['dim']]+args['step_size'],args['step_size']))
+    for x in tqdm(pts):
+        if args['dim']==0:
+            tten = tucker(train_avg, rank=[x,dims[1],dims[2]])
+            tten_val = tucker(val_avg, rank=[x,dims[1],dims[2]])
+        elif args['dim']==1:
+            tten = tucker(train_avg, rank=[dims[0],x,dims[2]])
+            tten_val = tucker(val_avg, rank=[dims[0],x,dims[2]])
+        else:
+            tten = tucker(train_avg, rank=[dims[0],dims[1],x])
+            tten_val = tucker(val_avg, rank=[dims[0],dims[1],x])
+
+        #recon = tl.tucker_to_tensor(tten)
+        factors = tten[1]
+        factors_val = tten_val[1]
 
         # errors_tavg_tavg.append(get_recon_error(train_avg, train_avg, factors))
         # errors_tavg_train.append(get_recon_error(train_avg, t_sample, factors))
@@ -109,15 +145,13 @@ def main():
         # errors_tavg_val.append(get_recon_error(train_avg, v_sample, factors))
         # errors_vavg_vavg.append(get_recon_error(val_avg, val_avg, factors_val))
         # errors_vavg_val.append(get_recon_error(val_avg, v_sample, factors_val))
-        #reduc = tl.tenalg.multi_mode_dot(v_sample, factors_val, transpose=True)
-        #recon = tl.tenalg.multi_mode_dot(reduc, factors_val, transpose=False)
         #pdb.set_trace()
-        # logger.report_scalar("train avg", "train avg", iteration=x,value=get_recon_error(train_avg, train_avg, factors))
-        # logger.report_scalar("train avg", "train sample", iteration=x,value=get_recon_error(train_avg, t_sample, factors))
-        # logger.report_scalar("train avg", "val avg", iteration=x, value=get_recon_error(train_avg, val_avg, factors))
-        # logger.report_scalar("train avg", "val sample", iteration=x, value=get_recon_error(train_avg, v_sample, factors))
-        # logger.report_scalar("val avg", "val avg", iteration=x, value=get_recon_error(val_avg, val_avg, factors_val))
-        #logger.report_scalar("val avg", "val sample", iteration=x, value=get_recon_error(val_avg, v_sample, factors_val))
+        logger.report_scalar("train avg", "train avg", iteration=x,value=get_recon_error(train_avg, factors))
+        logger.report_scalar("train avg", "train sample", iteration=x,value=get_recon_error(t_sample, factors))
+        logger.report_scalar("train avg", "val avg", iteration=x, value=get_recon_error(val_avg, factors))
+        logger.report_scalar("train avg", "val sample", iteration=x, value=get_recon_error(v_sample, factors))
+        logger.report_scalar("val avg", "val avg", iteration=x, value=get_recon_error(val_avg, factors_val))
+        logger.report_scalar("val avg", "val sample", iteration=x, value=get_recon_error(v_sample, factors_val))
     # figure, axis = plt.subplots(3, 2)
 
 

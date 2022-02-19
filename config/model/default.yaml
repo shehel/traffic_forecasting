@@ -17,6 +17,7 @@ dataset:
   # limit: 200
   sampling_height: 4
   sampling_width: 4
+  # TODO detach transform and have it separate?
   transform:
     _target_: src.data.transform.UNetTransform
     stack_time: True
