@@ -13,8 +13,9 @@ from src.competition.prepare_test_data.prepare_test_data import prepare_test
 from src.common.h5_util import load_h5_file
 
 import pdb
+import tensorly as tl
 
-
+from clearml import Task
 class T4CDataset(Dataset):
     def __init__(
         self,
@@ -24,7 +25,8 @@ class T4CDataset(Dataset):
         transform: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
         use_npy: bool = False,
         sampling_height: int = 1,
-        sampling_width: int = 1
+        sampling_width: int = 1,
+        reduced: bool = False
     ):
         """torch dataset from training data.
         Parameters
@@ -51,6 +53,10 @@ class T4CDataset(Dataset):
         self._load_dataset()
         self.sampling_height = sampling_height
         self.sampling_width = sampling_width
+        self.reduced = reduced
+        if self.reduced:
+            preprocess_task = Task.get_task(task_id='ea686462a02146d3b17b01c71b299161')
+            self.factors = preprocess_task.artifacts['trainset_factors'].get_local_copy()
 
     def _load_dataset(self):
         self.files = list(Path(self.root_dir).rglob(self.file_filter))
@@ -78,6 +84,7 @@ class T4CDataset(Dataset):
         two_hours = two_hours[:,::self.sampling_height,::self.sampling_width,:]
 
         input_data, output_data = prepare_test(two_hours)
+        pdb.set_trace()
 
         input_data = self._to_torch(input_data)
         output_data = self._to_torch(output_data)
@@ -85,6 +92,14 @@ class T4CDataset(Dataset):
         if self.transform is not None:
             input_data = self.transform.pre_transform(input_data)
             output_data = self.transform.pre_transform(output_data)
+
+
+        if self.reduced:
+            input_data = input_data.numpy()
+            reduc = tl.tenalg.multi_mode_dot(input_data, self.factors, transpose=True)
+            input_data = torch.from_numpy(reduc).float()
+
+
 
         return input_data, output_data
 

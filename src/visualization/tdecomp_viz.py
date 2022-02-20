@@ -61,12 +61,13 @@ def main():
         'val_city': '**/',
         'batch_size': 8,
         'num_workers': 4 ,
-        'iter': 0,
-        'sampling_height': 1,
-        'sampling_width': 1,
+        'iter': None,
+        'sampling_height': 4,
+        'sampling_width': 4,
         'labels': 0, # decompose inputs or outputs of the model
         'dim': 0,
-        'step_size': 32,
+        'step_size': 8,
+        'crop_pad': [2,1,2,2]
     }
 
     task.connect(args)
@@ -81,7 +82,7 @@ def main():
         sys.exit()
 
     # TODO Transform can be done better in config
-    transform = UNetTransform(stack_time=True, pre_batch_dim=False, post_batch_dim=True, crop_pad=[6,6,1,0], num_channels=8)
+    transform = UNetTransform(stack_time=True, pre_batch_dim=False, post_batch_dim=True, crop_pad=args['crop_pad'], num_channels=8)
     train_dataset = T4CDataset(root_dir=trainset_dir, file_filter=args['train_city']+args['train_filter']+'*8ch.h5',
                             transform=transform, sampling_height=args['sampling_height'], sampling_width=args['sampling_width'])
     val_dataset = T4CDataset(root_dir=valset_dir, file_filter=args['val_city']+args['val_filter']+'*8ch.h5',
@@ -153,7 +154,8 @@ def main():
         logger.report_scalar("val avg", "val avg", iteration=x, value=get_recon_error(val_avg, factors_val))
         logger.report_scalar("val avg", "val sample", iteration=x, value=get_recon_error(v_sample, factors_val))
     # figure, axis = plt.subplots(3, 2)
-
+    task.upload_artifact(name='trainset factors', artifact_object=factors)
+    task.upload_artifact(name='valset factors', artifact_object=factors_val)
 
     # # Make dimension-MSE plots
     # axis[0, 0].plot(pts, errors_tavg_tavg)
