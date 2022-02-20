@@ -1,5 +1,5 @@
 random_seed: 123
-name: second
+name: subset3days
 input_path: /home/shehel/ml/NeurIPS2021-traffic4cast/data/raw
 
 train_set:
@@ -11,8 +11,8 @@ train_set:
     - CHICAGO
     - ISTANBUL
     - MELBOURNE
-    count: 1
+    count: 3
 
 val_set:
     cities: MOSCOW
-    count: 1
+    count: 3

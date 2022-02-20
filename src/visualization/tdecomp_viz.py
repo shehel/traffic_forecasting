@@ -53,8 +53,8 @@ def main():
     task = Task.init(project_name="t4c_tensor_decomp", task_name="Reconstruction error")
     logger = task.get_logger()
     args = {
-        'trainset_dir': 'third',
-        'valset_dir': 'third',
+        'trainset_dir': 'subset3days',
+        'valset_dir': 'subset3days',
         'train_filter': 'training/',
         'val_filter': 'validation/',
         'train_city':'**/',
