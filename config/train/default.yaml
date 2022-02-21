@@ -3,7 +3,7 @@ random_seed: 123
 train_fraction: 0.9
 val_fraction: 0.1
 resume_checkpoint: null
-device: 'cpu'
+device: 'cuda'
 epochs: 1
 data_parallel: True
 optimizer:
@@ -11,5 +11,5 @@ optimizer:
   weight_decay: 0.0001
 dataloader:
   shuffle: True
-  batch_size: 16
-  num_workers: 0
+  batch_size: 8
+  num_workers: 8

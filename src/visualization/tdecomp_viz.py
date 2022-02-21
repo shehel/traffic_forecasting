@@ -57,17 +57,18 @@ def main():
         'valset_dir': 'subset3days',
         'train_filter': 'training/',
         'val_filter': 'validation/',
-        'train_city':'**/',
+        'train_city':'ISTANBUL/',
         'val_city': '**/',
         'batch_size': 8,
         'num_workers': 4 ,
-        'iter': None,
-        'sampling_height': 4,
-        'sampling_width': 4,
+        'iter': 0,
+        'sampling_height': 1,
+        'sampling_width': 1,
         'labels': 0, # decompose inputs or outputs of the model
         'dim': 0,
         'step_size': 8,
-        'crop_pad': [2,1,2,2]
+        'crop_pad': [6,6,1,0],
+        'save_step': 64
     }
 
     task.connect(args)
@@ -147,6 +148,11 @@ def main():
         # errors_vavg_vavg.append(get_recon_error(val_avg, val_avg, factors_val))
         # errors_vavg_val.append(get_recon_error(val_avg, v_sample, factors_val))
         #pdb.set_trace()
+
+        if args['save_step'] == x:
+            task.upload_artifact(name='trainset factors', artifact_object=factors)
+            task.upload_artifact(name='valset factors', artifact_object=factors_val)
+
         logger.report_scalar("train avg", "train avg", iteration=x,value=get_recon_error(train_avg, factors))
         logger.report_scalar("train avg", "train sample", iteration=x,value=get_recon_error(t_sample, factors))
         logger.report_scalar("train avg", "val avg", iteration=x, value=get_recon_error(val_avg, factors))
@@ -154,8 +160,6 @@ def main():
         logger.report_scalar("val avg", "val avg", iteration=x, value=get_recon_error(val_avg, factors_val))
         logger.report_scalar("val avg", "val sample", iteration=x, value=get_recon_error(v_sample, factors_val))
     # figure, axis = plt.subplots(3, 2)
-    task.upload_artifact(name='trainset factors', artifact_object=factors)
-    task.upload_artifact(name='valset factors', artifact_object=factors_val)
 
     # # Make dimension-MSE plots
     # axis[0, 0].plot(pts, errors_tavg_tavg)

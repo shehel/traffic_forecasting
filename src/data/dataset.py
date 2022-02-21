@@ -55,7 +55,7 @@ class T4CDataset(Dataset):
         self.sampling_width = sampling_width
         self.reduced = reduced
         if self.reduced:
-            preprocess_task = Task.get_task(task_id='ea686462a02146d3b17b01c71b299161')
+            preprocess_task = Task.get_task(task_id='df20df60a0294664b8fc7e286b046b3e')
             self.factors = preprocess_task.artifacts['trainset_factors'].get_local_copy()
 
     def _load_dataset(self):
@@ -84,7 +84,6 @@ class T4CDataset(Dataset):
         two_hours = two_hours[:,::self.sampling_height,::self.sampling_width,:]
 
         input_data, output_data = prepare_test(two_hours)
-        pdb.set_trace()
 
         input_data = self._to_torch(input_data)
         output_data = self._to_torch(output_data)
@@ -93,13 +92,10 @@ class T4CDataset(Dataset):
             input_data = self.transform.pre_transform(input_data)
             output_data = self.transform.pre_transform(output_data)
 
-
         if self.reduced:
             input_data = input_data.numpy()
             reduc = tl.tenalg.multi_mode_dot(input_data, self.factors, transpose=True)
             input_data = torch.from_numpy(reduc).float()
-
-
 
         return input_data, output_data
 
