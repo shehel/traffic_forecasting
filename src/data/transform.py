@@ -101,7 +101,7 @@ class UNetTransform(DataTransform):
             data = torch.squeeze(data, 0)
         return data
 
-    def unstack_on_time(self, data: torch.Tensor):
+    def unstack_on_time(self, data: torch.Tensor, batch_dim:bool = False):
         """
         `(k, 12 * 8, 495, 436) -> (k, 12, 495, 436, 8)`
         """

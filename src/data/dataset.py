@@ -3,7 +3,7 @@ from typing import Any
 from typing import Callable
 from typing import Optional
 from typing import Tuple
-
+import pickle
 import numpy as np
 import torch
 from torch.utils.data import Dataset
@@ -56,7 +56,9 @@ class T4CDataset(Dataset):
         self.reduced = reduced
         if self.reduced:
             preprocess_task = Task.get_task(task_id='df20df60a0294664b8fc7e286b046b3e')
-            self.factors = preprocess_task.artifacts['trainset_factors'].get_local_copy()
+            with open(preprocess_task.artifacts['trainset factors'].get_local_copy(), 'rb') as file:
+                self.factors = pickle.load(file)
+
 
     def _load_dataset(self):
         self.files = list(Path(self.root_dir).rglob(self.file_filter))

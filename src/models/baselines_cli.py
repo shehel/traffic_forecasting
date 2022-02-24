@@ -70,27 +70,52 @@ def reset_seeds(seed):
     os.environ['PYTHONHASHSEED'] = str(seed)
 
 def run_model(
+    task: Task,
     model: Model,
-    cfg: DictConfig
+    cfg: DictConfig,
+    valset: bool
 ):  # noqa
 
-    logging.info("dataset has size %s", len(model.dataset))
+    logging.info("dataset has size %s", len(model.t_dataset))
+    if valset == True:
+        logging.info("val dataset has size %s", len(model.v_dataset))
 
     # Train / Dev / Test set splits
     logging.info("train/dev split")
-    full_dataset_size = len(model.dataset)
+    full_dataset_size = len(model.t_dataset)
 
+    if valset == True:
+        full_dataset_size_val = len(model.v_dataset)
+        effective_val_dataset_size = full_dataset_size_val
 
     effective_dataset_size = full_dataset_size
-    if model.dataset.limit is not None:
-        effective_dataset_size = min(full_dataset_size, model.dataset.limit)
+
+    if model.t_dataset.limit is not None:
+        effective_dataset_size = min(full_dataset_size, model.t_dataset.limit)
+
+    try:
+        if model.v_dataset.limit is not None:
+            effective_val_dataset_size = min(full_dataset_size_val, model.v_dataset.limit)
+    except:
+        pass
+
     indices = list(range(full_dataset_size))
 
+    if valset == True:
+        val_indices = list(range(full_dataset_size_val))
+        np.random.shuffle(val_indices)
 
     np.random.shuffle(indices)
+
     assert np.isclose(cfg.train_fraction + cfg.val_fraction, 1.0)
     num_train_items = max(int(np.floor(cfg.train_fraction * effective_dataset_size)), cfg.dataloader.batch_size)
-    num_val_items = max(int(np.floor(cfg.val_fraction * effective_dataset_size)), cfg.dataloader.batch_size)
+
+    if valset == True:
+        num_val_items = max(int(np.floor(effective_val_dataset_size)), cfg.dataloader.batch_size)
+        train_indices, dev_indices = indices[:num_train_items], val_indices[:num_val_items]
+    else:
+        num_val_items = max(int(np.floor(cfg.val_fraction * effective_dataset_size)), cfg.dataloader.batch_size)
+        train_indices, dev_indices = indices[:num_train_items], indices[num_train_items : num_train_items + num_val_items]
     logging.info(
         "Taking %s from dataset of length %s, splitting into %s train items and %s val items",
         effective_dataset_size,
@@ -101,14 +126,18 @@ def run_model(
 
     # Data loaders
     # No geometric
-    train_indices, dev_indices = indices[:num_train_items], indices[num_train_items : num_train_items + num_val_items]
 
     train_sampler = SubsetRandomSampler(train_indices)
     dev_sampler = SubsetRandomSampler(dev_indices)
 
-    train_loader = DataLoader(model.dataset, batch_size=cfg.dataloader.batch_size, num_workers=cfg.dataloader.num_workers,
+    train_loader = DataLoader(model.t_dataset, batch_size=cfg.dataloader.batch_size, num_workers=cfg.dataloader.num_workers,
                               sampler=train_sampler)
-    val_loader = DataLoader(model.dataset, batch_size=cfg.dataloader.batch_size,
+    if valset:
+
+        val_loader = DataLoader(model.v_dataset, batch_size=cfg.dataloader.batch_size,
+                            num_workers=cfg.dataloader.num_workers, sampler=dev_sampler)
+    else:
+        val_loader = DataLoader(model.t_dataset, batch_size=cfg.dataloader.batch_size,
                             num_workers=cfg.dataloader.num_workers, sampler=dev_sampler)
 
     if cfg.device is None:
@@ -128,15 +157,20 @@ def run_model(
 
     model.network = model.network.to(cfg.device)
 
-
     # Loss
     loss = F.mse_loss
-    train_ignite(cfg.device, cfg.epochs, loss, optimizer, train_loader, val_loader, model.network)
+
+    checkpoints_dir = os.path.join(os.path.curdir, "checkpoints")
+    train_ignite(cfg.device, cfg.epochs, loss, optimizer, train_loader, val_loader, model.network, checkpoints_dir)
     logging.info("End training of train_model %s on %s for %s epochs", model.network, cfg.device, cfg.epochs)
+
+    # Upload checkpoint folder containing model with best val score
+    task.upload_artifact(name='model_checkpoint', artifact_object=checkpoints_dir)
+
     return model
 
 
-def train_ignite(device, epochs, loss, optimizer, train_loader, val_loader, train_model):
+def train_ignite(device, epochs, loss, optimizer, train_loader, val_loader, train_model, checkpoints_dir):
     # Validator
     validation_evaluator = create_supervised_evaluator(train_model, metrics={"val_loss": Loss(loss), "neg_val_loss": Loss(loss)*-1}, device=device)
     # Trainer
@@ -145,7 +179,6 @@ def train_ignite(device, epochs, loss, optimizer, train_loader, val_loader, trai
     run_id = binascii.hexlify(os.urandom(15)).decode("utf-8")
     artifacts_path = os.path.join(os.path.curdir, f"artifacts/{run_id}")
     logs_path = os.path.join(artifacts_path, "tensorboard")
-    checkpoints_dir = os.path.join(os.path.curdir, "checkpoints")
     RunningAverage(output_transform=lambda x: x).attach(trainer, name="loss")
     pbar = ProgressBar(persist=True, bar_format="{desc}[{n_fmt}/{total_fmt}] {percentage:3.0f}%|{bar}{postfix} [{elapsed}<{remaining}]{rate_fmt}")
     pbar.attach(trainer, metric_names="all")
@@ -207,12 +240,14 @@ def main(cfg: DictConfig):
     # Uses cfg.name to fetch clearml dataset which is used to instantiate
     # dataset object with a proper path.
 
+    # TODO case when validation data comes from a different set
     try:
         root_dir = Dataset.get(dataset_project="t4c", dataset_name=cfg.model.dataset.root_dir).get_local_copy()
     except:
         logging.info("Could not find dataset in clearml server. Exiting!")
         return
 
+    pdb.set_trace()
     model = instantiate(cfg.model, dataset={"root_dir":root_dir})
     logging.info("Model instantiated.")
 
@@ -220,11 +255,9 @@ def main(cfg: DictConfig):
 
     # Data set
     # TODO Removed untar operation and geometric datasets
-    logging.info("Dataset has size %s", len(model.dataset))
-    assert len(model.dataset) > 0
+    assert len(model.t_dataset) > 0
 
     # TODO Model restricted to unet.
-
     if cfg.train.resume_checkpoint is not None:
         logging.info("Reload checkpoint %s", cfg.train.resume_checkpoint)
         load_torch_model_from_checkpoint(checkpoint=cfg.train.resume_checkpoint, model=model.network)
@@ -232,7 +265,7 @@ def main(cfg: DictConfig):
     logging.info("Going to run train_model.")
     # logging.info(system_status())
     run_model(
-        model = model, cfg = cfg.train)
+        task=task, model=model, cfg=cfg.train, valset=cfg.model.valset)
 
     # for competition in competitions:
     #     additional_args = {}

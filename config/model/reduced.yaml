@@ -1,4 +1,4 @@
-_target_: src.models.model.Model
+target_: src.models.model.Model
 network:
     _target_: src.models.unet.UNet
     in_channels: 96 # 12*8+9
@@ -14,10 +14,11 @@ dataset:
   root_dir: "subset3days"
     #limit: 200
   use_npy: False
-  # limit: 200
+  limit: 20
   sampling_height: 4
   sampling_width: 4
   reduced: False
+
   # TODO detach transform and have it separate?
   transform:
     _target_: src.data.transform.UNetTransform
@@ -26,3 +27,6 @@ dataset:
     post_batch_dim: True
     crop_pad: [2,1,2,2] #[6,6,1,0]
     num_channels: 8
+
+valset: True
+valset_limit: 20
