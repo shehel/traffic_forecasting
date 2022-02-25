@@ -149,9 +149,9 @@ def run_model(
         # https://pytorch.org/tutorials/beginner/blitz/data_parallel_tutorial.html
         if torch.cuda.device_count() > 1:
             # https://stackoverflow.com/questions/59249563/runtimeerror-module-must-have-its-parameters-and-buffers-on-device-cuda1-devi
-            model.network = torch.nn.DataParallel(model.network, device_ids=device_ids)
-            logging.info(f"Let's use {len(train_model.device_ids)} GPUs: {train_model.device_ids}!")
-            device = f"cuda:{train_model.device_ids[0]}"
+            model.network = torch.nn.DataParallel(model.network, device_ids=cfg.device_ids)
+            logging.info(f"Let's use {len(model.network.device_ids)} GPUs: {model.network.device_ids}!")
+            device = f"cuda:{model.network.device_ids[0]}"
 
     optimizer = optim.Adam(model.network.parameters(), lr = cfg.optimizer.lr)
 

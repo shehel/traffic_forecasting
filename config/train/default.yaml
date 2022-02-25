@@ -5,7 +5,8 @@ val_fraction: 0
 resume_checkpoint: null
 device: 'cuda'
 epochs: 3
-data_parallel: False
+data_parallel: True
+device_ids:
 optimizer:
   lr: 1e-4
   weight_decay: 0.0001
