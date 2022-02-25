@@ -247,7 +247,6 @@ def main(cfg: DictConfig):
         logging.info("Could not find dataset in clearml server. Exiting!")
         return
 
-    pdb.set_trace()
     model = instantiate(cfg.model, dataset={"root_dir":root_dir})
     logging.info("Model instantiated.")
 
