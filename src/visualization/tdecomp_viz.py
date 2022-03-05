@@ -57,18 +57,20 @@ def main():
         'valset_dir': 'subset3days',
         'train_filter': 'training/',
         'val_filter': 'validation/',
-        'train_city':'ISTANBUL/',
+        'train_city':'**/',
         'val_city': '**/',
         'batch_size': 8,
         'num_workers': 4 ,
         'iter': 0,
         'sampling_height': 1,
         'sampling_width': 1,
+        'dim_start': 1,
+        'dim_step': 2,
         'labels': 0, # decompose inputs or outputs of the model
         'dim': 0,
         'step_size': 8,
         'crop_pad': [6,6,1,0],
-        'save_step': 64
+        'save_step': 16
     }
 
     task.connect(args)
@@ -85,9 +87,11 @@ def main():
     # TODO Transform can be done better in config
     transform = UNetTransform(stack_time=True, pre_batch_dim=False, post_batch_dim=True, crop_pad=args['crop_pad'], num_channels=8)
     train_dataset = T4CDataset(root_dir=trainset_dir, file_filter=args['train_city']+args['train_filter']+'*8ch.h5',
-                            transform=transform, sampling_height=args['sampling_height'], sampling_width=args['sampling_width'])
+                               transform=transform, sampling_height=args['sampling_height'], sampling_width=args['sampling_width'],
+                               dim_start=args['dim_start'], dim_step=args['dim_step'])
     val_dataset = T4CDataset(root_dir=valset_dir, file_filter=args['val_city']+args['val_filter']+'*8ch.h5',
-                            transform=transform, sampling_height=args['sampling_height'], sampling_width=args['sampling_width'])
+                            transform=transform, sampling_height=args['sampling_height'], sampling_width=args['sampling_width'],
+                             dim_start=args['dim_start'], dim_step=args['dim_step'])
     #train_dataset = T4CDataset(root_dir=trainset_dir, file_filter='ISTANBUL/training/*8ch.h5')
     #val_dataset = T4CDataset(root_dir=valset_dir, file_filter='**/validation/*8ch.h5')
 

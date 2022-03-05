@@ -11,10 +11,10 @@ network:
 
 dataset:
   _target_: src.data.dataset.T4CDataset
-  root_dir: "subset3days"
+  root_dir: "/home/shehel/ml/NeurIPS2021-traffic4cast/data/raw/"
     #limit: 200
   use_npy: False
-  limit:
+  limit: 10
   sampling_height: 1
   sampling_width: 1
   reduced: False
@@ -29,4 +29,5 @@ dataset:
     num_channels: 8
 
 valset: True
-valset_limit:
+valset_limit: 10
+val_filter: "**/validation/*8ch.h5"

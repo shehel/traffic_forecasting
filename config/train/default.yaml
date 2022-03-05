@@ -5,12 +5,14 @@ val_fraction: 0
 resume_checkpoint: null
 device: 'cuda'
 epochs: 3
-data_parallel: True
+data_parallel: False
 device_ids:
+amp_mode:
 optimizer:
   lr: 1e-4
   weight_decay: 0.0001
 dataloader:
   shuffle: True
-  batch_size: 3
+  batch_size: 1
   num_workers: 4
+  train_eval: 5

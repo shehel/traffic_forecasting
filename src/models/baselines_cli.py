@@ -117,23 +117,34 @@ def run_model(
         num_val_items = max(int(np.floor(cfg.val_fraction * effective_dataset_size)), cfg.dataloader.batch_size)
         train_indices, dev_indices = indices[:num_train_items], indices[num_train_items : num_train_items + num_val_items]
     logging.info(
-        "Taking %s from dataset of length %s, splitting into %s train items and %s val items",
+        "Taking %s from dataset of length %s, splitting into %s train items, %s train eval items and %s val items",
         effective_dataset_size,
         full_dataset_size,
         num_train_items,
+        min([cfg.dataloader.train_eval, num_train_items]),
         num_val_items,
     )
 
     # Data loaders
     # No geometric
-
     train_sampler = SubsetRandomSampler(train_indices)
     dev_sampler = SubsetRandomSampler(dev_indices)
 
     train_loader = DataLoader(model.t_dataset, batch_size=cfg.dataloader.batch_size, num_workers=cfg.dataloader.num_workers,
                               sampler=train_sampler)
-    if valset:
 
+    # Needed as train evaluator uses the entire training set for
+    # train loss which is prohibitively long. If the number of samplers
+    # specified for traing evaluation is more than number of samples in
+    # training set, default to train loader for loss calculation
+    if cfg.dataloader.train_eval and cfg.dataloader.train_eval < num_train_items:
+        train_eval_sampler = SubsetRandomSampler(indices[:cfg.dataloader.train_eval])
+        train_eval_loader = DataLoader(model.t_dataset, batch_size=cfg.dataloader.batch_size, num_workers=cfg.dataloader.num_workers,
+                              sampler=train_eval_sampler)
+    else:
+        train_eval_loader = train_loader
+
+    if valset:
         val_loader = DataLoader(model.v_dataset, batch_size=cfg.dataloader.batch_size,
                             num_workers=cfg.dataloader.num_workers, sampler=dev_sampler)
     else:
@@ -161,7 +172,7 @@ def run_model(
     loss = F.mse_loss
 
     checkpoints_dir = os.path.join(os.path.curdir, "checkpoints")
-    train_ignite(cfg.device, cfg.epochs, loss, optimizer, train_loader, val_loader, model.network, checkpoints_dir)
+    train_ignite(cfg.device, cfg.epochs, loss, optimizer, train_loader, train_eval_loader, val_loader, model.network, checkpoints_dir, cfg.amp_mode)
     logging.info("End training of train_model %s on %s for %s epochs", model.network, cfg.device, cfg.epochs)
 
     # Upload checkpoint folder containing model with best val score
@@ -170,12 +181,12 @@ def run_model(
     return model
 
 
-def train_ignite(device, epochs, loss, optimizer, train_loader, val_loader, train_model, checkpoints_dir):
+def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loader, val_loader, train_model, checkpoints_dir, amp_mode):
     # Validator
-    validation_evaluator = create_supervised_evaluator(train_model, metrics={"val_loss": Loss(loss), "neg_val_loss": Loss(loss)*-1}, device=device)
+    validation_evaluator = create_supervised_evaluator(train_model, metrics={"val_loss": Loss(loss), "neg_val_loss": Loss(loss)*-1}, device=device, amp_mode=amp_mode)
     # Trainer
-    trainer = create_supervised_trainer(train_model, optimizer, loss, device=device)
-    train_evaluator = create_supervised_evaluator(train_model, metrics={"loss": Loss(loss)}, device=device)
+    trainer = create_supervised_trainer(train_model, optimizer, loss, device=device, amp_mode=amp_mode)
+    train_evaluator = create_supervised_evaluator(train_model, metrics={"loss": Loss(loss)}, device=device, amp_mode=amp_mode)
     run_id = binascii.hexlify(os.urandom(15)).decode("utf-8")
     artifacts_path = os.path.join(os.path.curdir, f"artifacts/{run_id}")
     logs_path = os.path.join(artifacts_path, "tensorboard")
@@ -191,7 +202,7 @@ def train_ignite(device, epochs, loss, optimizer, train_loader, val_loader, trai
     @trainer.on(Events.EPOCH_COMPLETED)  # noqa
     def log_epoch_summary(engine: Engine):
         # Training
-        train_evaluator.run(train_loader)
+        train_evaluator.run(train_eval_loader)
         metrics = train_evaluator.state.metrics
         train_avg_loss = metrics["loss"]
 
@@ -244,8 +255,8 @@ def main(cfg: DictConfig):
     try:
         root_dir = Dataset.get(dataset_project="t4c", dataset_name=cfg.model.dataset.root_dir).get_local_copy()
     except:
-        logging.info("Could not find dataset in clearml server. Exiting!")
-        return
+        logging.info("Could not find dataset in clearml server. Using root_dir as path.")
+        root_dir = cfg.model.dataset.root_dir
 
     model = instantiate(cfg.model, dataset={"root_dir":root_dir})
     logging.info("Model instantiated.")

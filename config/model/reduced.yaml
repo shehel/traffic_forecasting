@@ -1,8 +1,8 @@
 _target_: src.models.model.Model
 network:
     _target_: src.models.unet.UNet
-    in_channels: 96 # 12*8+9
-    n_classes: 48 # 6*8
+    in_channels: 48 # 12*8+9
+    n_classes: 24 # 6*8
     depth: 5
     wf: 6
     padding: True
@@ -15,8 +15,11 @@ dataset:
     #limit: 200
   use_npy: False
   limit: 20
-  sampling_height: 4
-  sampling_width: 4
+  sampling_height: 1
+  sampling_width: 1
+  dim_start: 1
+  dim_step: 2
+  factors_task_id: "4e26ebc2959445c1ae9551189385ff47"
   reduced: False
 
   # TODO detach transform and have it separate?
@@ -25,8 +28,8 @@ dataset:
     stack_time: True
     pre_batch_dim: False
     post_batch_dim: True
-    crop_pad: [2,1,2,2] #[6,6,1,0]
-    num_channels: 8
+    crop_pad: [6,6,1,0]
+    num_channels: 4
 
 valset: True
 valset_limit: 20

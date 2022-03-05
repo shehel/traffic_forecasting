@@ -17,7 +17,8 @@ class Model:
                  network: torch.nn.Module,
                  dataset: T4CDataset,
                  valset: bool,
-                 valset_limit: int
+                 valset_limit: int,
+                 val_filter: str = "**/validation/*8ch.h5"
                  ) -> None:
         self.network = network
         self.t_dataset = dataset
@@ -26,7 +27,7 @@ class Model:
         # and change file filter and reload dataset files
         if valset == True:
             self.v_dataset = copy.deepcopy(dataset)
-            self.v_dataset.file_filter = "**/validation/*8ch.h5"
+            self.v_dataset.file_filter = val_filter
             self.v_dataset._load_dataset()
             if valset_limit:
                 self.v_dataset.limit = valset_limit

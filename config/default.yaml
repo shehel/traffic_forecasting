@@ -4,5 +4,5 @@ core:
     - test
 
 defaults:
-  - model: reduced
+  - model: full_res
   - train: default

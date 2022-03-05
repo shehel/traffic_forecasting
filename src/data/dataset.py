@@ -26,7 +26,10 @@ class T4CDataset(Dataset):
         use_npy: bool = False,
         sampling_height: int = 1,
         sampling_width: int = 1,
-        reduced: bool = False
+        dim_start: int = 0,
+        dim_step: int = 1,
+            reduced: bool = False,
+        factors_task_id: str = None
     ):
         """torch dataset from training data.
         Parameters
@@ -53,9 +56,11 @@ class T4CDataset(Dataset):
         self._load_dataset()
         self.sampling_height = sampling_height
         self.sampling_width = sampling_width
+        self.dim_start = dim_start
+        self.dim_step = dim_step
         self.reduced = reduced
         if self.reduced:
-            preprocess_task = Task.get_task(task_id='df20df60a0294664b8fc7e286b046b3e')
+            preprocess_task = Task.get_task(task_id=factors_task_id)
             with open(preprocess_task.artifacts['trainset factors'].get_local_copy(), 'rb') as file:
                 self.factors = pickle.load(file)
 
@@ -83,7 +88,7 @@ class T4CDataset(Dataset):
         start_hour = idx % MAX_TEST_SLOT_INDEX
 
         two_hours = self._load_h5_file(self.files[file_idx], sl=slice(start_hour, start_hour + 12 * 2 + 1))
-        two_hours = two_hours[:,::self.sampling_height,::self.sampling_width,:]
+        two_hours = two_hours[:,::self.sampling_height,::self.sampling_width,self.dim_start::self.dim_step]
 
         input_data, output_data = prepare_test(two_hours)
 
