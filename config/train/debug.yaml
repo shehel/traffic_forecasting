@@ -7,10 +7,12 @@ device: 'cpu'
 epochs: 3
 data_parallel: False
 device_ids:
+amp_mode:
 optimizer:
   lr: 1e-4
   weight_decay: 0.0001
 dataloader:
   shuffle: True
-  batch_size: 2
+  batch_size: 1
   num_workers: 0
+  train_eval: 5

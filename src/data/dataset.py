@@ -28,6 +28,9 @@ class T4CDataset(Dataset):
         sampling_width: int = 1,
         dim_start: int = 0,
         dim_step: int = 1,
+        output_start: int = 0,
+        output_step: int = 1,
+
             reduced: bool = False,
         factors_task_id: str = None
     ):
@@ -58,6 +61,9 @@ class T4CDataset(Dataset):
         self.sampling_width = sampling_width
         self.dim_start = dim_start
         self.dim_step = dim_step
+        self.output_start = output_start
+        self.output_step = output_step
+
         self.reduced = reduced
         if self.reduced:
             preprocess_task = Task.get_task(task_id=factors_task_id)
@@ -92,9 +98,11 @@ class T4CDataset(Dataset):
 
         input_data, output_data = prepare_test(two_hours)
 
+
         input_data = self._to_torch(input_data)
         output_data = self._to_torch(output_data)
 
+        output_data = output_data[:,:,:,self.output_start::self.output_step]
         if self.transform is not None:
             input_data = self.transform.pre_transform(input_data)
             output_data = self.transform.pre_transform(output_data)

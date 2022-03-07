@@ -2,7 +2,7 @@ _target_: src.models.model.Model
 network:
     _target_: src.models.unet.UNet
     in_channels: 96 # 12*8+9
-    n_classes: 48 # 6*8
+    n_classes: 24 # 6*8
     depth: 5
     wf: 6
     padding: True
@@ -17,6 +17,10 @@ dataset:
   limit: 10
   sampling_height: 1
   sampling_width: 1
+  dim_start: 0
+  dim_step: 1
+  output_start: 0
+  output_step: 2
   reduced: False
 
   # TODO detach transform and have it separate?
