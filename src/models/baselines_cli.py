@@ -245,6 +245,7 @@ def main(cfg: DictConfig):
 
     reset_seeds(cfg.train.random_seed)
     #sd = Dataset.get(dataset_project="t4c", dataset_name="default").get_mutable_local_copy("data/raw")
+    Task.add_requirements('git+https://github.com/fbcotter/pytorch_wavelets.git')
     task = Task.init(project_name='t4c', task_name='train_model')
     t4c_apply_basic_logging_config()
 

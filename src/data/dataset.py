@@ -13,7 +13,9 @@ from src.competition.prepare_test_data.prepare_test_data import prepare_test
 from src.common.h5_util import load_h5_file
 
 import pdb
+
 import tensorly as tl
+from pytorch_wavelets import DWTForward, DWTInverse
 
 from clearml import Task
 class T4CDataset(Dataset):
@@ -103,10 +105,10 @@ class T4CDataset(Dataset):
         output_data = self._to_torch(output_data)
 
         output_data = output_data[:,:,:,self.output_start::self.output_step]
+
         if self.transform is not None:
             input_data = self.transform.pre_transform(input_data)
             output_data = self.transform.pre_transform(output_data)
-
         if self.reduced:
             input_data = input_data.numpy()
             reduc = tl.tenalg.multi_mode_dot(input_data, self.factors, transpose=True)

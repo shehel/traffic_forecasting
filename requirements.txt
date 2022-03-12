@@ -1,10 +1,232 @@
-# local package
--e .
-
-# external requirements
-click
-Sphinx
-coverage
-awscli
-flake8
-python-dotenv>=0.5.1
+absl-py==1.0.0
+antlr4-python3-runtime==4.8
+argon2-cffi==21.3.0
+argon2-cffi-bindings==21.2.0
+arrow==1.2.1
+astroid @ file:///home/shehel/.cache/pypoetry/artifacts/21/c6/2d/0b99d40d43d11c8595cf4b14af4e097e67b113af52bd3d3215bdd633e7/astroid-2.9.3-py3-none-any.whl
+attrs==21.4.0
+autopep8==1.5.5
+backcall==0.2.0
+bandit @ file:///home/shehel/.cache/pypoetry/artifacts/71/24/37/0618fddb0dcce31ec99fc1ff2f87a2a69bd5e58d248d52cab956d730f7/bandit-1.7.1-py3-none-any.whl
+binaryornot==0.4.4
+black @ file:///home/shehel/.cache/pypoetry/artifacts/87/d1/97/e6fe54b7b2abd165602faaf4d82161a4e43219e057cbbc8fe0acbe8fe4/black-21.12b0-py3-none-any.whl
+bleach==4.1.0
+bracex==2.2.1
+CacheControl==0.12.10
+cached-property==1.5.2
+cachetools==5.0.0
+cachy==0.3.0
+certifi==2021.10.8
+cffi==1.15.0
+cfgv @ file:///home/shehel/.cache/pypoetry/artifacts/e4/c3/0e/ba7412c867cd0fdd7243be35d3167d14b7af49a4267977ab56c80e8f34/cfgv-3.3.1-py2.py3-none-any.whl
+chardet==4.0.0
+charset-normalizer==2.0.10
+clearml==1.1.6
+clearml-agent==1.1.1
+cleo==0.8.1
+click==8.0.3
+click-option-group==0.5.3
+clikit==0.6.2
+colorama @ file:///home/shehel/.cache/pypoetry/artifacts/33/a2/a4/09f68d0a2176d987da70e9dee0eaea3cc48f68b56a7fa8ac56c2d22dc7/colorama-0.4.4-py2.py3-none-any.whl
+cookiecutter==1.7.3
+coverage @ file:///home/shehel/.cache/pypoetry/artifacts/7c/d2/a7/a8522392965239b825a10fe3129807ac532477d80017f136636c58b5b4/coverage-6.2-cp37-cp37m-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_12_x86_64.manylinux2010_x86_64.whl
+coverage-badge @ file:///home/shehel/.cache/pypoetry/artifacts/40/4f/bb/73b9ac434f8f241065656d12ffaf9920b2cb4dec367bca31a02c9226d7/coverage_badge-1.1.0-py2.py3-none-any.whl
+crashtest==0.3.1
+cryptography==36.0.1
+cycler==0.11.0
+darglint @ file:///home/shehel/.cache/pypoetry/artifacts/2d/c7/5a/4e0fc1cd36f0012c311925d401ee1d8f82425aab0b12e15832b233ec5e/darglint-1.8.1-py3-none-any.whl
+debugpy==1.5.1
+decorator==5.1.1
+defusedxml==0.7.1
+distlib==0.3.4
+dparse @ file:///home/shehel/.cache/pypoetry/artifacts/61/38/88/d729d74e312bdef39a41d9388f962e838a49f53d9964f881552bd6b6db/dparse-0.5.1-py3-none-any.whl
+entrypoints==0.3
+filelock==3.4.2
+flake8==3.8.4
+fonttools==4.29.1
+furl==2.1.3
+future==0.18.2
+gitdb @ file:///home/shehel/.cache/pypoetry/artifacts/2e/38/b0/b7a7d9482f773997f9ff27adced7f6501781f984f52a2e6516fb93059a/gitdb-4.0.9-py3-none-any.whl
+GitPython @ file:///home/shehel/.cache/pypoetry/artifacts/2e/c3/b1/077092255165d60f5873251f2784d7cda642d647ee780afe3b3dc66370/GitPython-3.1.26-py3-none-any.whl
+google-auth==2.6.0
+google-auth-oauthlib==0.4.6
+googledrivedownloader==0.4
+GPUtil==1.4.0
+grpcio==1.43.0
+h5py==3.6.0
+html5lib==1.1
+hydra-core==1.1.1
+identify @ file:///home/shehel/.cache/pypoetry/artifacts/33/5c/d9/92b142b2bfc50b1e396b6b1295dff62e1b26ece9c40fa86ecfee5d1f80/identify-2.4.5-py2.py3-none-any.whl
+idna==2.10
+importlib-metadata @ file:///home/shehel/.cache/pypoetry/artifacts/5d/40/7f/5afeef82039e5d4ff7f85fbf5bd03a87d59fd745c73a1a2673832b8510/importlib_metadata-4.10.1-py3-none-any.whl
+importlib-resources==5.4.0
+iniconfig @ file:///home/shehel/.cache/pypoetry/artifacts/4b/53/0d/5ec25cd18ec0e1022085b2591e331f7d09cebac8403d91b26963219a0c/iniconfig-1.1.1-py2.py3-none-any.whl
+ipdb==0.13.9
+ipykernel==6.7.0
+ipython==7.31.1
+ipython-genutils==0.2.0
+ipywidgets==7.6.5
+isodate==0.6.1
+isort @ file:///home/shehel/.cache/pypoetry/artifacts/fd/db/db/dcd8c12c0cf3b15c0e53449d6a1890c469215961e8bf56f5ac5fd019b0/isort-5.10.1-py3-none-any.whl
+jedi==0.17.2
+jeepney==0.7.1
+Jinja2==3.0.3
+jinja2-time==0.2.0
+joblib==1.1.0
+jsonschema==3.2.0
+jupyter==1.0.0
+jupyter-client==7.1.2
+jupyter-console==6.4.0
+jupyter-contrib-core==0.3.3
+jupyter-contrib-nbextensions==0.5.1
+jupyter-core==4.9.1
+jupyter-highlight-selected-word==0.2.0
+jupyter-latex-envs==1.4.6
+jupyter-nbextensions-configurator==0.4.1
+jupyterlab-pygments==0.1.2
+jupyterlab-widgets==1.0.2
+keyring==21.8.0
+kiwisolver==1.3.2
+lazy-object-proxy @ file:///home/shehel/.cache/pypoetry/artifacts/12/61/fe/32342206388e2c5b9715f9a0adfcb0802eb9201171a5fe83f042e9d3d5/lazy_object_proxy-1.7.1-cp37-cp37m-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+llvmlite==0.38.0
+lockfile==0.12.2
+lxml==4.8.0
+Markdown==3.3.6
+MarkupSafe==2.0.1
+matplotlib==3.5.1
+matplotlib-inline==0.1.3
+mccabe @ file:///home/shehel/.cache/pypoetry/artifacts/c2/cd/ed/3c4495a1422fb12eefbca8b3c6ccc83ab4ec92fd39df029199cc4f4ee4/mccabe-0.6.1-py2.py3-none-any.whl
+mistune==0.8.4
+msgpack==1.0.3
+munkres==1.1.4
+mypy @ file:///home/shehel/.cache/pypoetry/artifacts/6f/21/aa/488e1a0c5bed487e682cd23ad9fd639d9f3025a17d63bad2710c537852/mypy-0.910-cp37-cp37m-manylinux2010_x86_64.whl
+mypy-extensions @ file:///home/shehel/.cache/pypoetry/artifacts/41/fb/ef/133cd18a3e22a06b8d77dfe2ba71c50c509e4d2484ee619c6631c0b5b2/mypy_extensions-0.4.3-py2.py3-none-any.whl
+nbclient==0.5.10
+nbconvert==6.4.1
+nbformat==5.1.3
+nest-asyncio==1.5.4
+networkx==2.6.3
+nodeenv @ file:///home/shehel/.cache/pypoetry/artifacts/62/b6/38/15bc8ef9749850c6ad053beb712ea5040a175d6fac93108b95c6f177ef/nodeenv-1.6.0-py2.py3-none-any.whl
+nose==1.3.7
+notebook==6.4.8
+numba==0.55.1
+numpy==1.21.5
+oauthlib==3.2.0
+omegaconf==2.1.1
+orderedmultidict==1.0.1
+packaging @ file:///home/shehel/.cache/pypoetry/artifacts/e7/69/d8/c898ce544c13176aff1086ce98482795d26eba3a19ba8b061818e93f71/packaging-21.3-py3-none-any.whl
+pandas==1.3.5
+pandocfilters==1.5.0
+parso==0.7.1
+pastel==0.2.1
+pathlib2==2.3.6
+pathspec @ file:///home/shehel/.cache/pypoetry/artifacts/e2/1c/f0/be9f6d96592b92339d4f269d62876cf2202b36d0dd8ca3c7542dd34a5f/pathspec-0.9.0-py2.py3-none-any.whl
+pbr @ file:///home/shehel/.cache/pypoetry/artifacts/a7/1d/6d/2b62b74fc7e242c21e62b3a1f1cf3e1ea6af0954429b156cea31cf25c7/pbr-5.8.0-py2.py3-none-any.whl
+peewee==3.14.10
+pexpect==4.8.0
+pickleshare==0.7.5
+Pillow==9.0.0
+pkginfo==1.8.2
+platformdirs==2.4.1
+pluggy @ file:///home/shehel/.cache/pypoetry/artifacts/a2/f2/fb/af06d2ada5b50ffeebc30019cb53c9f59430772091f3bd8f37635bfcb1/pluggy-1.0.0-py2.py3-none-any.whl
+poetry-core==1.0.7
+poyo==0.5.0
+pre-commit @ file:///home/shehel/.cache/pypoetry/artifacts/2f/c2/de/8ee80b26b571e5a768d64c8a0974304de75688d856072648dd1bdf616e/pre_commit-2.17.0-py2.py3-none-any.whl
+prometheus-client==0.13.0
+prompt-toolkit==3.0.24
+protobuf==3.19.4
+psutil==5.8.0
+ptyprocess==0.7.0
+py @ file:///home/shehel/.cache/pypoetry/artifacts/77/d8/b6/ed4363fe675755db81377dcfd5156902eb663233f55f9931c01ec8c653/py-1.11.0-py2.py3-none-any.whl
+pyasn1==0.4.8
+pyasn1-modules==0.2.8
+pycairo==1.20.1
+pycodestyle==2.6.0
+pycparser==2.21
+pydocstyle @ file:///home/shehel/.cache/pypoetry/artifacts/45/b5/96/064cd99dd9d7fb65b17ad775e09c4844e912f8c5d38e89b8c88e2f6c4f/pydocstyle-6.1.1-py3-none-any.whl
+pyflakes==2.2.0
+Pygments==2.11.2
+pyhocon==0.3.59
+PyJWT==2.0.1
+pylev==1.4.0
+pylint @ file:///home/shehel/.cache/pypoetry/artifacts/2e/f3/5b/82417c31e621067e6f7626f48bc86cb99ee83b58e18cb83cc9330742ea/pylint-2.12.2-py3-none-any.whl
+pyparsing==2.4.7
+pyrsistent==0.18.1
+pytest @ file:///home/shehel/.cache/pypoetry/artifacts/23/2d/43/9ef36e6f884bafbda72b71fd6045824896fcfdfb983e04fd461cecd1ef/pytest-6.2.5-py3-none-any.whl
+pytest-cov @ file:///home/shehel/.cache/pypoetry/artifacts/fa/88/8a/586562009c29741fa70ce090cb1098b6cec7063303767f7d0adce3163e/pytest_cov-3.0.0-py3-none-any.whl
+pytest-html @ file:///home/shehel/.cache/pypoetry/artifacts/97/7b/50/829701db7e1e9b6a987208c55464caca37dd0e18283f11e16b39cf225c/pytest_html-3.1.1-py3-none-any.whl
+pytest-metadata @ file:///home/shehel/.cache/pypoetry/artifacts/f8/3c/a5/c0302ba8ede3cce20000317e9dc5871ce63e51c19043cd0539a808feeb/pytest_metadata-1.11.0-py2.py3-none-any.whl
+python-box==5.4.1
+python-dateutil==2.8.2
+python-dotenv==0.19.2
+python-jsonrpc-server==0.4.0
+python-language-server==0.36.2
+python-slugify==5.0.2
+pytorch-ignite==0.4.8
+pytorch-wavelets @git+https://github.com/fbcotter/pytorch_wavelets.git  
+pytz==2021.3
+pyupgrade @ file:///home/shehel/.cache/pypoetry/artifacts/d2/6f/e4/ad0d48c2ab5ff41020dec097a2241727739cb8ab03e33706c494b8e3f0/pyupgrade-2.31.0-py2.py3-none-any.whl
+PyWavelets==1.2.0
+PyYAML==5.4.1
+pyzmq==22.3.0
+qtconsole==5.2.2
+QtPy==2.0.0
+rdflib==6.1.1
+requests==2.25.1
+requests-oauthlib==1.3.1
+requests-toolbelt==0.9.1
+rope==0.22.0
+rsa==4.8
+ruamel.yaml==0.17.21
+ruamel.yaml.clib==0.2.6
+safety @ file:///home/shehel/.cache/pypoetry/artifacts/d6/12/3a/0fada211c21fd9e66dfb15b64d9f8d21351c22702f61cd7a73594ee1de/safety-1.10.3-py2.py3-none-any.whl
+scikit-learn==1.0.2
+scipy==1.7.3
+SecretStorage==3.3.1
+semgrep==0.83.0
+Send2Trash==1.8.0
+shellingham==1.4.0
+six==1.15.0
+smmap @ file:///home/shehel/.cache/pypoetry/artifacts/28/be/db/ac502b0d7b71173295f539ff727e4f2a78060a7a2c8433c60dcb026a09/smmap-5.0.0-py3-none-any.whl
+snowballstemmer @ file:///home/shehel/.cache/pypoetry/artifacts/55/f9/81/0d27cc04b7c270dca09bee2ea10783fe9ac7e46002f25a5e9b076c3916/snowballstemmer-2.2.0-py2.py3-none-any.whl
+stevedore @ file:///home/shehel/.cache/pypoetry/artifacts/7e/c5/f6/a90fb8388ab1a8bb980c3efd2c151f18cc6a599a30e71dbee1c142e9c7/stevedore-3.5.0-py3-none-any.whl
+tabulate==0.8.9
+tensorboard==2.8.0
+tensorboard-data-server==0.6.1
+tensorboard-plugin-wit==1.8.1
+tensorly==0.7.0
+tensortools @ git+https://github.com/ahwillia/tensortools@f6d2f0a793f5e4b19f56a7178a967a1dd6d39686
+terminado==0.13.0
+testpath==0.5.0
+text-unidecode==1.3
+threadpoolctl==3.1.0
+tokenize-rt @ file:///home/shehel/.cache/pypoetry/artifacts/c8/d8/97/b2a07d73a128d4592ded37c61a6bd39e4f2e1ac3999756faf76395ffa4/tokenize_rt-4.2.1-py2.py3-none-any.whl
+toml @ file:///home/shehel/.cache/pypoetry/artifacts/4f/28/bf/d86336a479a830a4e11505920e408af09c2f5c129c3b59500aa93387fb/toml-0.10.2-py2.py3-none-any.whl
+tomli @ file:///home/shehel/.cache/pypoetry/artifacts/fa/e3/7a/b665121a311cc3add9d7dfcf5d346c8a9106593df77fdf20945d67e274/tomli-1.2.3-py3-none-any.whl
+tomlkit==0.8.0
+torch==1.10.2
+torch-geometric==2.0.3
+torch-sparse==0.6.12
+tornado==6.1
+tqdm==4.62.3
+traffic-forecasting==0.1.0
+traitlets==5.1.1
+typed-ast @ file:///home/shehel/.cache/pypoetry/artifacts/fe/7c/53/86cd82215775e7707b6f7cafaeed6802f93f0856a8371b0e15bc85d3c6/typed_ast-1.4.3-cp37-cp37m-manylinux1_x86_64.whl
+types-setuptools==57.4.7
+types-toml==0.10.3
+typing==3.7.4.3
+typing_extensions==4.0.1
+ujson==5.1.0
+urllib3==1.26.8
+virtualenv==20.13.0
+wcmatch==8.3
+wcwidth==0.2.5
+webencodings==0.5.1
+Werkzeug==2.0.2
+whyprofiler==0.0.1
+widgetsnbextension==3.5.2
+wrapt @ file:///home/shehel/.cache/pypoetry/artifacts/1f/4f/69/f44871d18b79bf2bf75b5d413ff8d535c4b7d3df9f67c3bc7c7c8467c8/wrapt-1.13.3-cp37-cp37m-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_12_x86_64.manylinux2010_x86_64.whl
+yacs==0.1.8
+yapf==0.32.0
+yappi==1.3.3
+zipp==3.7.0

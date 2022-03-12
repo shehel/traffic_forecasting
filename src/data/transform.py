@@ -3,6 +3,8 @@ import numpy as np
 from typing import Optional, Tuple
 
 from src.data.data_transform import DataTransform
+import pywt
+from pytorch_wavelets import DWTForward, DWTInverse
 
 
 import pdb
@@ -27,7 +29,7 @@ class UNetTransform(DataTransform):
         self.post_batch_dim = post_batch_dim
         self.crop_pad = crop_pad
         self.num_channels = num_channels
-
+        self.xfm = DWTForward(J=1, wave='db2', mode='reflect')
     def pre_transform(
         self,
         data: np.ndarray,
@@ -46,6 +48,10 @@ class UNetTransform(DataTransform):
 
         if self.stack_time:
             data = self.stack_on_time(data, batch_dim=True)
+
+        Yl, Yh = self.xfm(data)
+        data = torch.cat((Yl, Yh[0].reshape(1, data.shape[1]*3, Yl.shape[-2], Yl.shape[-1])), 1)
+
         if self.crop_pad is not None:
             zeropad2d = torch.nn.ZeroPad2d(self.crop_pad)
             data = zeropad2d(data)
