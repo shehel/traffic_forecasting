@@ -77,8 +77,8 @@ class UNetTransform(DataTransform):
             right = width - right
             bottom = height - bottom
             data = data[:, :, top:bottom, left:right]
-        if self.stack_time:
-            data = self.unstack_on_time(data, batch_dim=True)
+        # if self.stack_time:
+        #     data = self.unstack_on_time(data, batch_dim=True)
         if not self.post_batch_dim:
             data = torch.squeeze(data, 0)
         return data

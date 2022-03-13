@@ -11,7 +11,7 @@ network:
 
 dataset:
   _target_: src.data.dataset.T4CDataset
-  root_dir: "/home/shehel/ml/NeurIPS2021-traffic4cast/data/raw/"
+  root_dir: "subset3days" #"/home/shehel/ml/NeurIPS2021-traffic4cast/data/raw/"
     #limit: 200
   use_npy: False
   limit: 10
@@ -19,7 +19,7 @@ dataset:
   sampling_width: 1
   dim_start: 0
   dim_step: 1
-  output_start: 0
+  output_start: 1
   output_step: 2
   reduced: False
 
@@ -30,7 +30,7 @@ dataset:
     pre_batch_dim: False
     post_batch_dim: True
     crop_pad: [6,6,1,0]
-    num_channels: 8
+    num_channels: 4
 
 valset: True
 valset_limit: 10
