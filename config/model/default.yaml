@@ -1,7 +1,7 @@
 _target_: src.models.model.Model
 network:
     _target_: src.models.unet.UNet
-    in_channels: 384 # 12*8+9
+    in_channels: 288 # 12*8+9
     n_classes: 96 # 6*8
     depth: 5
     wf: 6
@@ -19,7 +19,7 @@ dataset:
   sampling_width: 1
   dim_start: 0
   dim_step: 1
-  output_start: 0
+  output_start: 1
   output_step: 2
   reduced: False
 
@@ -29,7 +29,7 @@ dataset:
     stack_time: True
     pre_batch_dim: False
     post_batch_dim: True
-    crop_pad: [3,2,4,3]
+    crop_pad: [0,0,1,1]
     num_channels: 4
 
 valset: True
