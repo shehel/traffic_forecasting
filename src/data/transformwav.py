@@ -5,8 +5,8 @@ from typing import Optional, Tuple
 from src.data.data_transform import DataTransform
 import pywt
 from pytorch_wavelets import DWTForward, DWTInverse
-
-class UNetTransform(DataTransform):
+import pdb
+class UNetWavTransform(DataTransform):
     """Pre-processor and post-processor to convert T4C data to
     be compatible with Unet
     Args:
@@ -21,12 +21,16 @@ class UNetTransform(DataTransform):
     def __init__(self, stack_time: bool = False, pre_batch_dim: bool = False,
                  post_batch_dim: bool = True,
                  num_channels: int = 8,
-                 crop_pad: Optional[Tuple[int, int, int, int]] = None) -> None:
+                 crop_pad: Optional[Tuple[int, int, int, int]] = None,
+                 wave: str = "db7", mode:str = "zero", 
+                 keep_ch: int = 3) -> None:
         self.stack_time = stack_time
         self.pre_batch_dim = pre_batch_dim
         self.post_batch_dim = post_batch_dim
         self.crop_pad = crop_pad
         self.num_channels = num_channels
+        self.xfm = DWTForward(J=1, wave=wave, mode=mode)
+        self.keep_ch = keep_ch
     def pre_transform(
         self,
         data: np.ndarray,
@@ -46,6 +50,12 @@ class UNetTransform(DataTransform):
         if self.stack_time:
             data = self.stack_on_time(data, batch_dim=True)
 
+        Yl, Yh = self.xfm(data)
+        if Yl.shape[1] == 96:
+            data = torch.cat((Yl, Yh[0].reshape(1, data.shape[1]*self.keep_ch, Yl.shape[-2], Yl.shape[-1])), 1)
+            Yh[0] = Yh[0][:, :, :self.keep_ch, :, :]
+        else:
+            data = torch.cat((Yl, Yh[0].reshape(1, data.shape[1]*3, Yl.shape[-2], Yl.shape[-1])), 1)
         if self.crop_pad is not None:
             zeropad2d = torch.nn.ZeroPad2d(self.crop_pad)
             data = zeropad2d(data)

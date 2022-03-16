@@ -4,7 +4,7 @@ train_fraction: 1
 val_fraction: 0
 resume_checkpoint: null
 device: 'cuda'
-epochs: 3
+epochs: 30
 data_parallel: False
 device_ids:
 amp_mode:

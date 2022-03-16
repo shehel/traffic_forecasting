@@ -13,7 +13,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 
 # TODO change logger to common.util
-@hydra.main(config_path="../../config/data", config_name="default")
+@hydra.main(config_path="../../config/data", config_name="21d")
 def main(cfg: DictConfig) -> None:
     """ Runs data processing scripts to turn raw data from input path into
         a subset ready for quick training saved in output path.
@@ -25,7 +25,7 @@ def main(cfg: DictConfig) -> None:
 
     # uses the name of the yaml file aos dataset folder name
     try:
-        Dataset.get(dataset_project="t4c", dataset_name=cfg.name).get_local_copy()
+        Dataset.get(dataset_project="t4c", dataset_name=cfg.name)
         logger.info('Dataset exists. Skipping to next step.')
     except:
 
