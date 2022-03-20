@@ -14,7 +14,7 @@ dataset:
   root_dir: "7days" #"/home/shehel/ml/NeurIPS2021-traffic4cast/data/raw/"
     #limit: 200
   use_npy: False
-  limit: 1
+  limit: 20
   sampling_height: 1
   sampling_width: 1
   dim_start: 0
