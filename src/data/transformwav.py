@@ -52,8 +52,9 @@ class UNetWavTransform(DataTransform):
 
         Yl, Yh = self.xfm(data)
         if Yl.shape[1] == 96:
-            data = torch.cat((Yl, Yh[0].reshape(1, data.shape[1]*self.keep_ch, Yl.shape[-2], Yl.shape[-1])), 1)
+            #Yh[0][:,:,2,:,:] = 0
             Yh[0] = Yh[0][:, :, :self.keep_ch, :, :]
+            data = torch.cat((Yl, Yh[0].reshape(1, data.shape[1]*self.keep_ch, Yl.shape[-2], Yl.shape[-1])), 1)
         else:
             data = torch.cat((Yl, Yh[0].reshape(1, data.shape[1]*3, Yl.shape[-2], Yl.shape[-1])), 1)
         if self.crop_pad is not None:

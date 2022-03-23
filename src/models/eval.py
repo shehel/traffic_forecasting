@@ -155,11 +155,11 @@ case:
 """
 def main():
     reset_seeds(123)
-    task = Task.init(project_name="t4c", task_name="Model Evaluation")
+    task = Task.init(project_name="t4c_eval", task_name="Model Evaluation")
     logger = task.get_logger()
     args = {
-        'task_id': '845d6fef6e4e439ab02574d54a4888a3',
-        'batch_size': 2,
+        'task_id': 'ed81e62b35ea4c638ad57199b63fabb2',
+        'batch_size': 4,
         'num_workers': 0,
         'pixel': (108, 69),
         'loader': 'val',
@@ -197,13 +197,15 @@ def main():
         loader = DataLoader(model.v_dataset, batch_size=bs, num_workers=args['num_workers'], shuffle=False)
     else:
         loader = DataLoader(model.t_dataset, batch_size=bs, num_workers=args['num_workers'], shuffle=False)
-
+    print ('Dataloader first few files: {}'.format(loader.dataset.files[:10]))
     trues = np.zeros((max_idx, d))
     preds = np.zeros((max_idx, d))
 
 
     mse=[]
     msenz=[]
+    mse1=[]
+    mse2=[]
 
     pixel_x, pixel_y = args['pixel']
     try:
@@ -228,10 +230,15 @@ def main():
         pred = model.t_dataset.transform.post_transform(batch_prediction)
         true = model.t_dataset.transform.post_transform(i[1])
 
+        # pred1 = pred[:,:,:,:,::2]
+        # true1 = true[:,:,:,:,::2]
+        # pred2 = pred[:,:,:,:,1::2]
+        # true2 = true[:,:,:,:,1::2]
         if is_waveTransform:
             _,_,rh,rw = pred.shape
             Yl = pred[:, :24,:,:]
             Yh = [pred[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
+            Yh[0][:,:,:,:,:] = 0
             pred = ifm((Yl, Yh))
 
             Yl = true[:, :24,:,:]
@@ -239,6 +246,8 @@ def main():
             true = ifm((Yl, Yh))
 
         mse.append(mean_squared_error(pred.flatten(), true.flatten()))
+        # mse1.append(mean_squared_error(pred1.flatten(), true1.flatten()))
+        # mse2.append(mean_squared_error(pred2.flatten(), true2.flatten()))
 
         if idx>=max_idx/bs:
             continue
@@ -258,7 +267,9 @@ def main():
         #if idx==240:
         #break
     print (mse)
-    print(sum(mse)/len(mse))
+    print("Overall MSE: {}".format(sum(mse)/len(mse)))
+    # print("MSE vol: {}".format(sum(mse1)/len(mse1)))
+    # print("MSE speed: {}".format(sum(mse2)/len(mse2)))
     plot_dims(task, trues, preds, d)
 if __name__ == "__main__":
     main()

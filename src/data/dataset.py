@@ -1,3 +1,4 @@
+import random
 from pathlib import Path
 from typing import Any
 from typing import Callable
@@ -18,6 +19,12 @@ import tensorly as tl
 from pytorch_wavelets import DWTForward, DWTInverse
 
 from clearml import Task
+
+perm = [[0,1,2,3,4,5,6,7],
+        [2,3,4,5,6,7,0,1],
+        [4,5,6,7,0,1,2,3],
+        [6,7,0,1,2,3,4,5]
+        ]
 class T4CDataset(Dataset):
     def __init__(
         self,
@@ -98,6 +105,8 @@ class T4CDataset(Dataset):
         two_hours = self._load_h5_file(self.files[file_idx], sl=slice(start_hour, start_hour + 12 * 2 + 1))
         two_hours = two_hours[:,::self.sampling_height,::self.sampling_width,self.dim_start::self.dim_step]
 
+        dir_sel = random.randint(0,3)
+        two_hours = two_hours[:,:,:,perm[dir_sel]]
         input_data, output_data = prepare_test(two_hours)
 
 
@@ -105,6 +114,7 @@ class T4CDataset(Dataset):
         output_data = self._to_torch(output_data)
 
         output_data = output_data[:,:,:,self.output_start::self.output_step]
+        output_data = output_data[:,:,:,0:1]
 
         if self.transform is not None:
             input_data = self.transform.pre_transform(input_data)
