@@ -45,11 +45,11 @@ from hydra.utils import instantiate
 from omegaconf import OmegaConf
 
 from clearml import Dataset, Task
-perm = [[0,1,2,3,4,5,6,7],
+perm = np.array([[0,1,2,3,4,5,6,7],
         [2,3,4,5,6,7,0,1],
         [4,5,6,7,0,1,2,3],
         [6,7,0,1,2,3,4,5]
-        ]
+        ])
 
 def reset_seeds(seed):
     random.seed(seed)
@@ -163,7 +163,7 @@ def main():
     task = Task.init(project_name="t4c_eval", task_name="Model Evaluation")
     logger = task.get_logger()
     args = {
-        'task_id': '845d6fef6e4e439ab02574d54a4888a3',
+        'task_id': '406605c977064682a4753d40ea5636ae',#'845d6fef6e4e439ab02574d54a4888a3',
         'batch_size': 1,
         'num_workers': 0,
         'pixel': (108, 69),
@@ -186,11 +186,12 @@ def main():
         print("Could not find dataset in clearml server. Exiting!")
 
     model = instantiate(cfg.model, dataset={"root_dir":root_dir})
-    model_path = train_task.artifacts['model_checkpoint'].get_local_copy()
+    #model_path = train_task.artifacts['model_checkpoint'].get_local_copy()
+    model_path = "/home/shehel/waste/1dir2.5708.pt"
     network = model.network
     network = network.to('cuda')
-    #model_state_dict = torch.load(model_path)
-    model_state_dict = torch.load(model_path+'/'+os.listdir(model_path)[0])#,map_location=torch.device('cpu'))
+    model_state_dict = torch.load(model_path)
+    #model_state_dict = torch.load(model_path+'/'+os.listdir(model_path)[0])#,map_location=torch.device('cpu'))
     network.load_state_dict(model_state_dict['train_model'])
     network.eval()
 
@@ -229,43 +230,51 @@ def main():
     t = 0
 
     for idx, i in (enumerate(loader)):
-        pdb.set_trace()
-        batch_prediction = network(i[0].to('cuda'))
-        batch_prediction = batch_prediction.cpu().detach()#.numpy()
+        for directions in range(4):
+            switch = perm[directions]
+            for c in range(1,12): switch = np.vstack([switch, perm[directions]+(8*c)])
+            inp = i[0][:,switch.flatten(),:,:]
+            outp = i[1][:,directions::4, :,:]
+            batch_prediction = network(inp.to('cuda'))
+            batch_prediction = batch_prediction.cpu().detach()#.numpy()
 
-        pred = model.t_dataset.transform.post_transform(batch_prediction)
-        true = model.t_dataset.transform.post_transform(i[1])
+            pred = model.t_dataset.transform.post_transform(batch_prediction)
+            true = model.t_dataset.transform.post_transform(outp)
 
         # pred1 = pred[:,:,:,:,::2]
         # true1 = true[:,:,:,:,::2]
         # pred2 = pred[:,:,:,:,1::2]
         # true2 = true[:,:,:,:,1::2]
-        if is_waveTransform:
-            _,_,rh,rw = pred.shape
-            Yl = pred[:, :24,:,:]
-            Yh = [pred[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
-            Yh[0][:,:,:,:,:] = 0
-            pred = ifm((Yl, Yh))
+            if is_waveTransform:
+                _,_,rh,rw = pred.shape
+                Yl = pred[:, :24,:,:]
+                Yh = [pred[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
+                Yh[0][:,:,:,:,:] = 0
+                pred = ifm((Yl, Yh))
 
-            Yl = true[:, :24,:,:]
-            Yh = [true[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
-            true = ifm((Yl, Yh))
+                Yl = true[:, :24,:,:]
+                Yh = [true[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
+                true = ifm((Yl, Yh))
 
-        mse.append(mean_squared_error(pred.flatten(), true.flatten()))
+            try:
+                mse.append(mean_squared_error(pred.flatten(), true.flatten()))
+            except:
+                pdb.set_trace()
+        print (mse)
         # mse1.append(mean_squared_error(pred1.flatten(), true1.flatten()))
         # mse2.append(mean_squared_error(pred2.flatten(), true2.flatten()))
 
-        if idx>=max_idx/bs:
-            continue
-        else:
-            if is_waveTransform:
-                true = unstack_on_time(true[:,:,:-1,:], d)
-                pred = unstack_on_time(pred[:,:,:-1,:], d)
+        # if idx>=max_idx/bs:
+        #     continue
+        # else:
+        #     if is_waveTransform:
+        #         true = unstack_on_time(true[:,:,:-1,:], d)
+        #         pred = unstack_on_time(pred[:,:,:-1,:], d)
 
-            p_pred = (pred[:,t, pixel_x, pixel_y, :].numpy())
-            p_true = (true[:,t, pixel_x, pixel_y, :].numpy())
-            trues[idx*bs:idx*bs+bs] = p_true
-            preds[idx*bs:idx*bs+bs] = p_pred
+        #     p_pred = (pred[:,t, pixel_x, pixel_y, :].numpy())
+        #     p_true = (true[:,t, pixel_x, pixel_y, :].numpy())
+        #     trues[idx*bs:idx*bs+bs] = p_true
+        #     preds[idx*bs:idx*bs+bs] = p_pred
 
         #msenz.append(mse_func(pred.flatten(), true.flatten(), nonzero))
         #trues.extend(p_true)
@@ -276,6 +285,6 @@ def main():
     print("Overall MSE: {}".format(sum(mse)/len(mse)))
     # print("MSE vol: {}".format(sum(mse1)/len(mse1)))
     # print("MSE speed: {}".format(sum(mse2)/len(mse2)))
-    plot_dims(task, trues, preds, d)
+    # plot_dims(task, trues, preds, d)
 if __name__ == "__main__":
     main()

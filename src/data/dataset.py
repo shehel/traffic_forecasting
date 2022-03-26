@@ -105,8 +105,8 @@ class T4CDataset(Dataset):
         two_hours = self._load_h5_file(self.files[file_idx], sl=slice(start_hour, start_hour + 12 * 2 + 1))
         two_hours = two_hours[:,::self.sampling_height,::self.sampling_width,self.dim_start::self.dim_step]
 
-        dir_sel = random.randint(0,3)
-        two_hours = two_hours[:,:,:,perm[dir_sel]]
+        #dir_sel = random.randint(0,3)
+        #two_hours = two_hours[:,:,:,perm[dir_sel]]
         input_data, output_data = prepare_test(two_hours)
 
 
@@ -114,7 +114,7 @@ class T4CDataset(Dataset):
         output_data = self._to_torch(output_data)
 
         output_data = output_data[:,:,:,self.output_start::self.output_step]
-        output_data = output_data[:,:,:,0:1]
+        #output_data = output_data[:,:,:,0:1]
 
         if self.transform is not None:
             input_data = self.transform.pre_transform(input_data)

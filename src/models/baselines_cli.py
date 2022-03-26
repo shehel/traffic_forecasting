@@ -176,7 +176,7 @@ def run_model(
     logging.info("End training of train_model %s on %s for %s epochs", model.network, cfg.device, cfg.epochs)
 
     # Upload checkpoint folder containing model with best val score
-    # task.upload_artifact(name='model_checkpoint', artifact_object=checkpoints_dir)
+    task.upload_artifact(name='model_checkpoint', artifact_object=checkpoints_dir)
 
     return model
 

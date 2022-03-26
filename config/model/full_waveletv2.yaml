@@ -1,15 +1,13 @@
 _target_: src.models.model.Model
 network:
-    _target_: src.models.dwt_unet.DWTUNet
-    in_channels: 384 # 12*8+9
-    n_classes: 24 # 6*8
+    _target_: src.models.unet.UNet
+    in_channels: 96 # 12*8+9
+    n_classes: 6 # 6*8
     depth: 5
     wf: 6
     padding: True
     up_mode: 'upconv'
     batch_norm: True
-    wave: 'db7'
-    mode: 'zero'
 
 dataset:
   _target_: src.data.dataset.T4CDataset
@@ -31,8 +29,8 @@ dataset:
     stack_time: True
     pre_batch_dim: False
     post_batch_dim: True
-    crop_pad: [0,0,2,2]
-    num_channels: 4
+    crop_pad: [6,6,1,0]
+    num_channels: 1
 
 valset: True
 valset_limit: 1
