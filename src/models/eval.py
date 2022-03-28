@@ -31,9 +31,6 @@ from torch.utils.data import SubsetRandomSampler
 
 from src.data.dataset import T4CDataset
 
-
-from IPython.display import HTML
-
 import matplotlib.pyplot as plt
 from PIL import Image
 
@@ -95,19 +92,21 @@ def plot_tmaps(true, pred, viz_dir, logger):
             fig.add_subplot(rows, columns, t_step+1)
 
             # showing image
-            plt.imshow(pred[t_step,:,:,dir])
+            _ = plt.imshow(pred[t_step,:,:,dir])
             plt.axis('off')
 
         plt.title("pred")
+
         for t_step in range(true.shape[0]):
 
             # Adds a subplot at the 1st position
             fig.add_subplot(rows, columns, t_step+pred.shape[0]+1)
             # showing image
-            plt.imshow(true[t_step,:,:,dir])
+            _ = plt.imshow(true[t_step,:,:,dir])
             plt.axis('off')
 
         plt.title("true")
+        plt.close()
 
         logger.current_logger().report_image("viz", "images", iteration=dir, image=fig2img(fig))
 
@@ -118,67 +117,29 @@ def plot_tmaps(true, pred, viz_dir, logger):
                 "viz", "pred frames", iteration=dir, stream=get_ani(pred[:,:,:,dir]), file_extension='html')
 
 
-def plot_dims(task, true_series, pred_series, dim=8):
+def plot_dims(logger, true_series, pred_series, dim=8):
 
     x = list(range(true_series.shape[0]))
-    # For Sine Function
-    plt.plot(x, true_series[:,0])
-    task.logger.report_matplotlib_figure(title="VolNW", series="VolNW", figure=plt)
-    plt.plot(x, pred_series[:,0])
-    task.logger.report_matplotlib_figure(title="VolNW", series="VolNW", figure=plt)
-    plt.show()
-    plt.close()
-    #
-    # For Cosine Function
-    plt.plot(x, true_series[:,1])
-    task.logger.report_matplotlib_figure(title="SpeedNW", series="SpeedNW", figure=plt)
-    plt.plot(x, pred_series[:,1])
-    task.logger.report_matplotlib_figure(title="SpeedNW", series="SpeedNW", figure=plt)
-    plt.show()
-    plt.close()
-    plt.plot(x, true_series[:,2])
-    task.logger.report_matplotlib_figure(title="VolumeNE", series="VolumeNE", figure=plt)
-    plt.plot(x, pred_series[:,2])
-    task.logger.report_matplotlib_figure(title="VolumeNE", series="VolumeNE", figure=plt)
-    plt.show()
-    plt.close()
-    # For Cosine Function
-    plt.plot(x, true_series[:,3])
-    task.logger.report_matplotlib_figure(title="SpeedNE", series="SpeedNE", figure=plt)
-    plt.plot(x, pred_series[:,3])
-    task.logger.report_matplotlib_figure(title="SpeedNE", series="SpeedNE", figure=plt)
-    plt.show()
-    plt.close(
-)
-    if dim == 8:
-        plt.plot(x, true_series[:,4])
-        task.logger.report_matplotlib_figure(title="VolumeSE", series="VolumeSE", figure=plt)
-        plt.plot(x, pred_series[:,4])
-        task.logger.report_matplotlib_figure(title="VolumeSE", series="VolumeSE", figure=plt)
-        plt.show()
-        plt.close()
 
-        # For Cosine Function
-        plt.plot(x, true_series[:,5])
-        task.logger.report_matplotlib_figure(title="SpeedSE", series="SpeedSE", figure=plt)
-        plt.plot(x, pred_series[:,5])
-        task.logger.report_matplotlib_figure(title="SpeedSE", series="SpeedSE", figure=plt)
-        plt.show()
-        plt.close()
-
-        plt.plot(x, true_series[:,6])
-        task.logger.report_matplotlib_figure(title="VolumeSW", series="VolumeSW", figure=plt)
-        plt.plot(x, pred_series[:,6])
-        task.logger.report_matplotlib_figure(title="VolumeSW", series="VolumeSW", figure=plt)
-        plt.show()
-        plt.close()
-
-        plt.plot(x, true_series[:,7])
-        task.logger.report_matplotlib_figure(title="SpeedSW", series="SpeedSW", figure=plt)
-        plt.plot(x, pred_series[:,7])
-        task.logger.report_matplotlib_figure(title="SpeedSW", series="SpeedSW", figure=plt)
-        plt.show()
-        plt.close()
+    for i in range(0, true_series.shape[-1]):
+        logger.current_logger().report_scatter2d(
+        str(i),
+        "true",
+        iteration=0,
+        scatter=np.dstack((x, true_series[:,i])).squeeze(),
+        xaxis="t",
+        yaxis="count",
+        mode='lines+markers'
+    )
+        logger.current_logger().report_scatter2d(
+            str(i),
+            "pred",
+            iteration=0,
+            scatter=np.dstack((x, pred_series[:,i])).squeeze(),
+            xaxis="t",
+            yaxis="count",
+            mode='lines+markers'
+        )
 
 
 def unstack_on_time(data: torch.Tensor, batch_dim:bool = False, num_channels=4):
@@ -218,7 +179,7 @@ def main():
     task = Task.init(project_name="t4c_eval", task_name="Model Evaluation")
     logger = task.get_logger()
     args = {
-        'task_id': '857b473b210e45b5ba60c0f3f2e9404b',
+        'task_id': '9be6fe52a8c44efe8052bfd4e24f2351',
         'batch_size': 1,
         'num_workers': 0,
         'pixel': (108, 69),
@@ -292,6 +253,7 @@ def main():
 
         pred = model.t_dataset.transform.post_transform(batch_prediction)
         true = model.t_dataset.transform.post_transform(i[1])
+        pdb.set_trace()
 
         # pred1 = pred[:,:,:,:,::2]
         # true1 = true[:,:,:,:,::2]
@@ -301,7 +263,7 @@ def main():
             _,_,rh,rw = pred.shape
             Yl = pred[:, :24,:,:]
             Yh = [pred[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
-            Yh[0][:,:,:,:,:] = 0
+            #Yh[0][:,:,:,:,:] = 0
             pred = ifm((Yl, Yh))
 
             Yl = true[:, :24,:,:]
@@ -335,6 +297,6 @@ def main():
     print("Overall MSE: {}".format(sum(mse)/len(mse)))
     # print("MSE vol: {}".format(sum(mse1)/len(mse1)))
     # print("MSE speed: {}".format(sum(mse2)/len(mse2)))
-    plot_dims(task, trues, preds, d)
+    plot_dims(logger, trues, preds, d)
 if __name__ == "__main__":
     main()

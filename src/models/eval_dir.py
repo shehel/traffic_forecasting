@@ -33,6 +33,8 @@ from src.data.dataset import T4CDataset
 
 
 
+import matplotlib.animation as animation
+from PIL import Image
 import matplotlib.pyplot as plt
 
 from sklearn.metrics import mean_squared_error
@@ -59,68 +61,90 @@ def reset_seeds(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     os.environ['PYTHONHASHSEED'] = str(seed)
+def fig2img(fig):
+    """Convert a Matplotlib figure to a PIL Image and return it"""
+    import io
+    buf = io.BytesIO()
+    fig.savefig(buf)
+    buf.seek(0)
+    img = Image.open(buf)
+    return img.convert('RGB')
+
+def get_ani(mat):
+    fig, ax = plt.subplots(figsize=(8, 8))
+    imgs = []
+    for img in mat:
+        img = ax.imshow(img, animated=True, vmax=np.median(img.flatten())+50)
+        imgs.append([img])
+    ani = animation.ArtistAnimation(fig, imgs, interval=1000, blit=True, repeat_delay=3000)
+    return ani.to_html5_video()
+
+def plot_tmaps(true, pred, viz_dir, logger):
+    for dir in viz_dir:
+        fig = plt.figure(figsize=(50, 35))
+
+        # setting values to rows and column variables
+        rows = 2
+        columns = pred.shape[0]
+        for t_step in range(pred.shape[0]):
+
+            # reading images
 
 
-def plot_dims(task, true_series, pred_series, dim=8):
+            # Adds a subplot at the 1st position
+            fig.add_subplot(rows, columns, t_step+1)
+
+            # showing image
+            _ = plt.imshow(pred[t_step,:,:,dir])
+            plt.axis('off')
+
+        plt.title("pred")
+
+        for t_step in range(true.shape[0]):
+
+            # Adds a subplot at the 1st position
+            fig.add_subplot(rows, columns, t_step+pred.shape[0]+1)
+            # showing image
+            _ = plt.imshow(true[t_step,:,:,dir])
+            plt.axis('off')
+
+        plt.title("true")
+        plt.close()
+
+        logger.current_logger().report_image("viz", "images", iteration=dir, image=fig2img(fig))
+
+        logger.current_logger().report_media(
+                "viz", "true frames", iteration=dir, stream=get_ani(true[:,:,:,dir]), file_extension='html')
+
+        logger.current_logger().report_media(
+                "viz", "pred frames", iteration=dir, stream=get_ani(pred[:,:,:,dir]), file_extension='html')
+
+
+def plot_dims(logger, true_series, pred_series, dim=8):
 
     x = list(range(true_series.shape[0]))
-    # For Sine Function
-    plt.plot(x, true_series[:,0])
-    task.logger.report_matplotlib_figure(title="VolNW", series="VolNW", figure=plt)
-    plt.plot(x, pred_series[:,0])
-    task.logger.report_matplotlib_figure(title="VolNW", series="VolNW", figure=plt)
-    plt.show()
-    plt.close()
-    #
-    # For Cosine Function
-    plt.plot(x, true_series[:,1])
-    task.logger.report_matplotlib_figure(title="SpeedNW", series="SpeedNW", figure=plt)
-    plt.plot(x, pred_series[:,1])
-    task.logger.report_matplotlib_figure(title="SpeedNW", series="SpeedNW", figure=plt)
-    plt.show()
-    plt.close()
-    plt.plot(x, true_series[:,2])
-    task.logger.report_matplotlib_figure(title="VolumeNE", series="VolumeNE", figure=plt)
-    plt.plot(x, pred_series[:,2])
-    task.logger.report_matplotlib_figure(title="VolumeNE", series="VolumeNE", figure=plt)
-    plt.show()
-    plt.close()
-    # For Cosine Function
-    plt.plot(x, true_series[:,3])
-    task.logger.report_matplotlib_figure(title="SpeedNE", series="SpeedNE", figure=plt)
-    plt.plot(x, pred_series[:,3])
-    task.logger.report_matplotlib_figure(title="SpeedNE", series="SpeedNE", figure=plt)
-    plt.show()
-    plt.close()
-    if dim == 8:
-        plt.plot(x, true_series[:,4])
-        task.logger.report_matplotlib_figure(title="VolumeSE", series="VolumeSE", figure=plt)
-        plt.plot(x, pred_series[:,4])
-        task.logger.report_matplotlib_figure(title="VolumeSE", series="VolumeSE", figure=plt)
-        plt.show()
-        plt.close()
 
-        # For Cosine Function
-        plt.plot(x, true_series[:,5])
-        task.logger.report_matplotlib_figure(title="SpeedSE", series="SpeedSE", figure=plt)
-        plt.plot(x, pred_series[:,5])
-        task.logger.report_matplotlib_figure(title="SpeedSE", series="SpeedSE", figure=plt)
-        plt.show()
-        plt.close()
+    for i in range(0, true_series.shape[-1]):
+        logger.current_logger().report_scatter2d(
+        str(i),
+        "true",
+        iteration=0,
+        scatter=np.dstack((x, true_series[:,i])).squeeze(),
+        xaxis="t",
+        yaxis="count",
+        mode='lines+markers'
+    )
+        logger.current_logger().report_scatter2d(
+            str(i),
+            "pred",
+            iteration=0,
+            scatter=np.dstack((x, pred_series[:,i])).squeeze(),
+            xaxis="t",
+            yaxis="count",
+            mode='lines+markers'
+        )
 
-        plt.plot(x, true_series[:,6])
-        task.logger.report_matplotlib_figure(title="VolumeSW", series="VolumeSW", figure=plt)
-        plt.plot(x, pred_series[:,6])
-        task.logger.report_matplotlib_figure(title="VolumeSW", series="VolumeSW", figure=plt)
-        plt.show()
-        plt.close()
 
-        plt.plot(x, true_series[:,7])
-        task.logger.report_matplotlib_figure(title="SpeedSW", series="SpeedSW", figure=plt)
-        plt.plot(x, pred_series[:,7])
-        task.logger.report_matplotlib_figure(title="SpeedSW", series="SpeedSW", figure=plt)
-        plt.show()
-        plt.close()
 
 
 def unstack_on_time(data: torch.Tensor, batch_dim:bool = False, num_channels=4):
@@ -163,12 +187,14 @@ def main():
     task = Task.init(project_name="t4c_eval", task_name="Model Evaluation")
     logger = task.get_logger()
     args = {
-        'task_id': '406605c977064682a4753d40ea5636ae',#'845d6fef6e4e439ab02574d54a4888a3',
+        'task_id': '9be6fe52a8c44efe8052bfd4e24f2351',
         'batch_size': 1,
         'num_workers': 0,
         'pixel': (108, 69),
         'loader': 'val',
-        'num_channels': 8
+        'num_channels': 4,
+        'viz_dir': [0,1,2,3],
+        'viz_idx': 0
     }
 
     task.connect(args)
@@ -187,7 +213,7 @@ def main():
 
     model = instantiate(cfg.model, dataset={"root_dir":root_dir})
     #model_path = train_task.artifacts['model_checkpoint'].get_local_copy()
-    model_path = "/home/shehel/waste/1dir2.5708.pt"
+    model_path = "/data/best1dir.pt"
     network = model.network
     network = network.to('cuda')
     model_state_dict = torch.load(model_path)
@@ -229,6 +255,8 @@ def main():
     pixel_x, pixel_y = 108, 69
     t = 0
 
+    pred_comb = np.zeros((bs, 6, 495, 436, d))
+    true_comb = np.zeros((bs, 6, 495, 436, d))
     for idx, i in (enumerate(loader)):
         for directions in range(4):
             switch = perm[directions]
@@ -240,6 +268,9 @@ def main():
 
             pred = model.t_dataset.transform.post_transform(batch_prediction)
             true = model.t_dataset.transform.post_transform(outp)
+            pred_comb[:, :, :, :,directions:directions+1] = pred.numpy()
+            true_comb[:, :, :, :,directions:directions+1] = true.numpy()
+
 
         # pred1 = pred[:,:,:,:,::2]
         # true1 = true[:,:,:,:,::2]
@@ -249,32 +280,34 @@ def main():
                 _,_,rh,rw = pred.shape
                 Yl = pred[:, :24,:,:]
                 Yh = [pred[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
-                Yh[0][:,:,:,:,:] = 0
+                #Yh[0][:,:,:,:,:] = 0
                 pred = ifm((Yl, Yh))
 
                 Yl = true[:, :24,:,:]
                 Yh = [true[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
                 true = ifm((Yl, Yh))
 
-            try:
-                mse.append(mean_squared_error(pred.flatten(), true.flatten()))
-            except:
-                pdb.set_trace()
-        print (mse)
+        try:
+            mse.append(mean_squared_error(pred_comb.flatten(), true_comb.flatten()))
+        except:
+            print ("Failed in mse calc!")
+
+        if idx == args['viz_idx']:
+            plot_tmaps(true_comb[0], pred_comb[0], args['viz_dir'], logger)
         # mse1.append(mean_squared_error(pred1.flatten(), true1.flatten()))
         # mse2.append(mean_squared_error(pred2.flatten(), true2.flatten()))
 
-        # if idx>=max_idx/bs:
-        #     continue
-        # else:
+        if idx>=max_idx/bs:
+            continue
+        else:
         #     if is_waveTransform:
         #         true = unstack_on_time(true[:,:,:-1,:], d)
         #         pred = unstack_on_time(pred[:,:,:-1,:], d)
 
-        #     p_pred = (pred[:,t, pixel_x, pixel_y, :].numpy())
-        #     p_true = (true[:,t, pixel_x, pixel_y, :].numpy())
-        #     trues[idx*bs:idx*bs+bs] = p_true
-        #     preds[idx*bs:idx*bs+bs] = p_pred
+             p_pred = (pred_comb[:,t, pixel_x, pixel_y, :])
+             p_true = (true_comb[:,t, pixel_x, pixel_y, :])
+             trues[idx*bs:idx*bs+bs] = p_true
+             preds[idx*bs:idx*bs+bs] = p_pred
 
         #msenz.append(mse_func(pred.flatten(), true.flatten(), nonzero))
         #trues.extend(p_true)
@@ -285,6 +318,6 @@ def main():
     print("Overall MSE: {}".format(sum(mse)/len(mse)))
     # print("MSE vol: {}".format(sum(mse1)/len(mse1)))
     # print("MSE speed: {}".format(sum(mse2)/len(mse2)))
-    # plot_dims(task, trues, preds, d)
+    plot_dims(logger, trues, preds, d)
 if __name__ == "__main__":
     main()
