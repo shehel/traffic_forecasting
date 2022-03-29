@@ -38,15 +38,15 @@ from ignite.metrics import Loss
 from ignite.metrics import RunningAverage
 
 from ignite.contrib.engines.common import save_best_model_by_val_score
-
-
+from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Union
+from collections.abc import Mapping
 from torch.utils.data import DataLoader
 from torch.utils.data import SubsetRandomSampler
 
 from src.models.checkpointing import load_torch_model_from_checkpoint
 from src.models.checkpointing import save_torch_model_to_checkpoint
 from src.data.dataset import T4CDataset
-
+from ignite.utils import convert_tensor
 import pdb
 
 import hydra
@@ -59,6 +59,8 @@ from src.common.utils import t4c_apply_basic_logging_config
 
 from clearml import Task
 from clearml import Dataset
+
+from src.models.loss_metric import ForwardLoss
 
 def reset_seeds(seed):
     random.seed(seed)
@@ -182,17 +184,55 @@ def run_model(
 
 
 def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loader, val_loader, train_model, checkpoints_dir, amp_mode):
+
+    def _prepare_batch(batch: Sequence[torch.Tensor], device: Optional[Union[str, torch.device]] = None, non_blocking: bool = False
+                    ) -> Tuple[Union[torch.Tensor, Sequence, Mapping, str, bytes], ...]:
+        x, y = batch
+        return (
+            convert_tensor(x, device=device, non_blocking=non_blocking),
+            convert_tensor(y, device=device, non_blocking=non_blocking),
+        )
+    def update_model(engine: Engine, batch):
+        with torch.cuda.amp.autocast():
+            x, y = _prepare_batch(batch, device=device)
+            loss, _ = train_model(x, y)
+            total_loss = loss.mean()
+            optimizer.zero_grad()
+            total_loss.backward()
+            optimizer.step()
+            return total_loss
+
+    def evaluate_model(engine: Engine, batch):
+        train_model.eval()
+        with torch.no_grad():
+            with torch.cuda.amp.autocast():
+            #
+                x, y = _prepare_batch(batch, device=device)
+                #x, y = batch
+                loss, _ = train_model(x, y)
+                total_loss = loss.mean()
+                return total_loss
+
     # Validator
-    validation_evaluator = create_supervised_evaluator(train_model, metrics={"val_loss": Loss(loss), "neg_val_loss": Loss(loss)*-1}, device=device, amp_mode=amp_mode)
     # Trainer
-    trainer = create_supervised_trainer(train_model, optimizer, loss, device=device, amp_mode=amp_mode)
-    train_evaluator = create_supervised_evaluator(train_model, metrics={"loss": Loss(loss)}, device=device, amp_mode=amp_mode)
+    ##trainer = create_supervised_trainer(train_model, optimizer, loss, device=device, amp_mode=amp_mode)
+    trainer = Engine(update_model)
+    train_evaluator = Engine(evaluate_model)
+    metric_train = ForwardLoss()
+    metric_train.attach(train_evaluator, "floss")
+
+    validation_evaluator = Engine(evaluate_model)
+    metric_val = ForwardLoss()
+    metric_val.attach(validation_evaluator, "floss")
+
+    #trainer = create_supervised_trainer(train_model, optimizer, loss, device=device, amp_mode=amp_mode)
     run_id = binascii.hexlify(os.urandom(15)).decode("utf-8")
     artifacts_path = os.path.join(os.path.curdir, f"artifacts/{run_id}")
     logs_path = os.path.join(artifacts_path, "tensorboard")
     RunningAverage(output_transform=lambda x: x).attach(trainer, name="loss")
     pbar = ProgressBar(persist=True, bar_format="{desc}[{n_fmt}/{total_fmt}] {percentage:3.0f}%|{bar}{postfix} [{elapsed}<{remaining}]{rate_fmt}")
     pbar.attach(trainer, metric_names="all")
+
 
     @trainer.on(Events.EPOCH_STARTED)  # noqa
     def log_epoch_start(engine: Engine):
@@ -205,34 +245,34 @@ def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loade
         # Training
         train_evaluator.run(train_eval_loader)
         metrics = train_evaluator.state.metrics
-        train_avg_loss = metrics["loss"]
+        train_avg_loss = metrics["floss"]
 
         # Validation
         validation_evaluator.run(val_loader)
         metrics = validation_evaluator.state.metrics
-        val_avg_loss = metrics["val_loss"]
-
+        val_avg_loss = metrics["floss"]
         msg = f"Epoch summary for epoch {engine.state.epoch}: loss: {train_avg_loss:.4f}, val_loss: {val_avg_loss:.4f}\n"
+
         pbar.log_message(msg)
         logging.info(msg)
         # logging.info(system_status())
 
     tb_logger = TensorboardLogger(log_dir=logs_path)
     tb_logger.attach(trainer, log_handler=GradsHistHandler(train_model), event_name=Events.ITERATION_COMPLETED)
-    tb_logger.attach_output_handler(
-        train_evaluator, event_name=Events.EPOCH_COMPLETED, tag="train", metric_names=["loss"], global_step_transform=global_step_from_engine(trainer)
-    )
-    tb_logger.attach_output_handler(
-        validation_evaluator,
-        event_name=Events.EPOCH_COMPLETED,
-        tag="validation",
-        metric_names=["val_loss"],
-        global_step_transform=global_step_from_engine(trainer),
-    )
+    # tb_logger.attach_output_handler(
+    #     train_evaluator, event_name=Events.EPOCH_COMPLETED, tag="train", metric_names=["loss"], global_step_transform=global_step_from_engine(trainer)
+    # )
+    # tb_logger.attach_output_handler(
+    #     validation_evaluator,
+    #     event_name=Events.EPOCH_COMPLETED,
+    #     tag="validation",
+    #     metric_names=["val_loss"],
+    #     global_step_transform=global_step_from_engine(trainer),
+    # )
     to_save = {"train_model": train_model, "optimizer": optimizer}
     #checkpoint_handler = Checkpoint(to_save, DiskSaver(checkpoints_dir, create_dir=True, require_empty=False), n_saved=1)
     checkpoint_handler = save_best_model_by_val_score(checkpoints_dir, validation_evaluator, to_save,
-                                                      metric_name="neg_val_loss", n_saved=1, trainer=trainer)
+                                                      metric_name="floss", n_saved=1, trainer=trainer)
     validation_evaluator.add_event_handler(Events.COMPLETED, checkpoint_handler)
     # Run Training
     logging.info("Start training of train_model %s on %s for %s epochs", train_model, device, epochs)

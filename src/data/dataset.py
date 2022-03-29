@@ -65,6 +65,7 @@ class T4CDataset(Dataset):
             if self.use_npy:
                 self.file_filter = "**/training_npy/*.npy"
         self.transform = transform
+        self.len = 0
         self._load_dataset()
         self.sampling_height = sampling_height
         self.sampling_width = sampling_width
@@ -72,7 +73,6 @@ class T4CDataset(Dataset):
         self.dim_step = dim_step
         self.output_start = output_start
         self.output_step = output_step
-
         self.reduced = reduced
         if self.reduced:
             preprocess_task = Task.get_task(task_id=factors_task_id)
@@ -84,7 +84,8 @@ class T4CDataset(Dataset):
 
         file_list = list(Path(self.root_dir).rglob(self.file_filter))
         for file in file_list:
-            self.files.append(file_list)
+            self.files.append(load_h5_file(file))
+        self.len = len(self.files) * MAX_TEST_SLOT_INDEX
 
     def _load_h5_file(self, fn, sl: Optional[slice]):
         if self.use_npy:
@@ -93,10 +94,9 @@ class T4CDataset(Dataset):
             return load_h5_file(fn, sl=sl)
 
     def __len__(self):
-        size_240_slots_a_day = len(self.files) * MAX_TEST_SLOT_INDEX
         #if self.limit is not None:
         #    return min(size_240_slots_a_day, self.limit)
-        return size_240_slots_a_day
+        return self.len
 
     def __getitem__(self, idx: int) -> Tuple[Any, Any]:
         if idx > self.__len__():
@@ -105,7 +105,8 @@ class T4CDataset(Dataset):
         file_idx = idx // MAX_TEST_SLOT_INDEX
         start_hour = idx % MAX_TEST_SLOT_INDEX
 
-        two_hours = self._load_h5_file(self.files[file_idx], sl=slice(start_hour, start_hour + 12 * 2 + 1))
+        #two_hours = self._load_h5_file(self.files[file_idx], sl=slice(start_hour, start_hour + 12 * 2 + 1))
+        two_hours = self.files[file_idx][start_hour:start_hour + 12 * 2 + 1]
         two_hours = two_hours[:,::self.sampling_height,::self.sampling_width,self.dim_start::self.dim_step]
 
         #dir_sel = random.randint(0,3)

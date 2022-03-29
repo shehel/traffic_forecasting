@@ -1,8 +1,9 @@
+
 _target_: src.models.model.Model
 network:
     _target_: src.models.unet.UNet
     in_channels: 96 # 12*8+9
-    n_classes: 6 # 6*8
+    n_classes: 48 # 6*8
     depth: 5
     wf: 6
     padding: True
@@ -14,13 +15,13 @@ dataset:
   root_dir: "7days" #"/home/shehel/ml/NeurIPS2021-traffic4cast/data/raw/"
     #limit: 200
   use_npy: False
-  limit: 1
+  limit:
   sampling_height: 1
   sampling_width: 1
   dim_start: 0
   dim_step: 1
   output_start: 0
-  output_step: 2
+  output_step: 1
   reduced: False
 
   # TODO detach transform and have it separate?
@@ -30,8 +31,8 @@ dataset:
     pre_batch_dim: False
     post_batch_dim: True
     crop_pad: [6,6,1,0]
-    num_channels: 1
+    num_channels: 8
 
 valset: True
-valset_limit: 1
+valset_limit:
 val_filter: "**/validation/*8ch.h5"
