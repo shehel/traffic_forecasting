@@ -31,3 +31,6 @@ class Model:
             self.v_dataset._load_dataset()
             if valset_limit:
                 self.v_dataset.limit = valset_limit
+        # load dataset after to prevent populating
+        # valset with training data
+        self.t_dataset._load_dataset()
