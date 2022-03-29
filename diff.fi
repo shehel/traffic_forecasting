@@ -1,0 +1,1154 @@
+diff --git a/100_percent_gpu_utilization.prof b/100_percent_gpu_utilization.prof
+deleted file mode 100644
+index 2c35671..0000000
+Binary files a/100_percent_gpu_utilization.prof and /dev/null differ
+diff --git a/config/model/full_res.yaml b/config/model/full_res.yaml
+index 50f0aa7..f9583b0 100644
+--- a/config/model/full_res.yaml
++++ b/config/model/full_res.yaml
+@@ -1,15 +1,13 @@
+ _target_: src.models.model.Model
+ network:
+-    _target_: src.models.dwt_unet.DWTUNet
+-    in_channels: 384 # 12*8+9
++    _target_: src.models.unet.UNet
++    in_channels: 96 # 12*8+9
+     n_classes: 24 # 6*8
+     depth: 5
+     wf: 6
+     padding: True
+     up_mode: 'upconv'
+     batch_norm: True
+-    wave: 'db7'
+-    mode: 'zero'
+ 
+ dataset:
+   _target_: src.data.dataset.T4CDataset
+@@ -31,7 +29,7 @@ dataset:
+     stack_time: True
+     pre_batch_dim: False
+     post_batch_dim: True
+-    crop_pad: [0,0,2,2]
++    crop_pad: [6,6,1,0]
+     num_channels: 4
+ 
+ valset: True
+diff --git a/config/model/full_wavelet.yaml b/config/model/full_wavelet.yaml
+index 58778f7..bac8629 100644
+--- a/config/model/full_wavelet.yaml
++++ b/config/model/full_wavelet.yaml
+@@ -14,7 +14,7 @@ dataset:
+   root_dir: "7days" #"/home/shehel/ml/NeurIPS2021-traffic4cast/data/raw/"
+     #limit: 200
+   use_npy: False
+-  limit: 20
++  limit: 1
+   sampling_height: 1
+   sampling_width: 1
+   dim_start: 0
+diff --git a/config/model/full_waveletv2.yaml b/config/model/full_waveletv2.yaml
+deleted file mode 100644
+index 5d0b0e8..0000000
+--- a/config/model/full_waveletv2.yaml
++++ /dev/null
+@@ -1,37 +0,0 @@
+-_target_: src.models.model.Model
+-network:
+-    _target_: src.models.unet.UNet
+-    in_channels: 96 # 12*8+9
+-    n_classes: 6 # 6*8
+-    depth: 5
+-    wf: 6
+-    padding: True
+-    up_mode: 'upconv'
+-    batch_norm: True
+-
+-dataset:
+-  _target_: src.data.dataset.T4CDataset
+-  root_dir: "7days" #"/home/shehel/ml/NeurIPS2021-traffic4cast/data/raw/"
+-    #limit: 200
+-  use_npy: False
+-  limit: 1
+-  sampling_height: 1
+-  sampling_width: 1
+-  dim_start: 0
+-  dim_step: 1
+-  output_start: 0
+-  output_step: 2
+-  reduced: False
+-
+-  # TODO detach transform and have it separate?
+-  transform:
+-    _target_: src.data.transform.UNetTransform
+-    stack_time: True
+-    pre_batch_dim: False
+-    post_batch_dim: True
+-    crop_pad: [6,6,1,0]
+-    num_channels: 1
+-
+-valset: True
+-valset_limit: 1
+-val_filter: "**/validation/*8ch.h5"
+diff --git a/config/train/default.yaml b/config/train/default.yaml
+index a543654..d7d9848 100644
+--- a/config/train/default.yaml
++++ b/config/train/default.yaml
+@@ -4,7 +4,7 @@ train_fraction: 1
+ val_fraction: 0
+ resume_checkpoint: null
+ device: 'cuda'
+-epochs: 1
++epochs: 30
+ data_parallel: False
+ device_ids:
+ amp_mode:
+@@ -14,5 +14,5 @@ optimizer:
+ dataloader:
+   shuffle: True
+   batch_size: 1
+-  num_workers: 2
+-  train_eval: 1
++  num_workers: 4
++  train_eval: 5
+diff --git a/pred.p b/pred.p
+deleted file mode 100644
+index 550ac79..0000000
+Binary files a/pred.p and /dev/null differ
+diff --git a/src/data/dataset.py b/src/data/dataset.py
+index 3be7d14..a3a06ce 100644
+--- a/src/data/dataset.py
++++ b/src/data/dataset.py
+@@ -1,4 +1,3 @@
+-import random
+ from pathlib import Path
+ from typing import Any
+ from typing import Callable
+@@ -19,12 +18,6 @@ import tensorly as tl
+ from pytorch_wavelets import DWTForward, DWTInverse
+ 
+ from clearml import Task
+-
+-perm = [[0,1,2,3,4,5,6,7],
+-        [2,3,4,5,6,7,0,1],
+-        [4,5,6,7,0,1,2,3],
+-        [6,7,0,1,2,3,4,5]
+-        ]
+ class T4CDataset(Dataset):
+     def __init__(
+         self,
+@@ -81,10 +74,7 @@ class T4CDataset(Dataset):
+ 
+ 
+     def _load_dataset(self):
+-
+-        file_list = list(Path(self.root_dir).rglob(self.file_filter))
+-        for file in file_list:
+-            self.files.append(file_list)
++        self.files = list(Path(self.root_dir).rglob(self.file_filter))
+ 
+     def _load_h5_file(self, fn, sl: Optional[slice]):
+         if self.use_npy:
+@@ -108,8 +98,6 @@ class T4CDataset(Dataset):
+         two_hours = self._load_h5_file(self.files[file_idx], sl=slice(start_hour, start_hour + 12 * 2 + 1))
+         two_hours = two_hours[:,::self.sampling_height,::self.sampling_width,self.dim_start::self.dim_step]
+ 
+-        #dir_sel = random.randint(0,3)
+-        #two_hours = two_hours[:,:,:,perm[dir_sel]]
+         input_data, output_data = prepare_test(two_hours)
+ 
+ 
+@@ -117,7 +105,6 @@ class T4CDataset(Dataset):
+         output_data = self._to_torch(output_data)
+ 
+         output_data = output_data[:,:,:,self.output_start::self.output_step]
+-        #output_data = output_data[:,:,:,0:1]
+ 
+         if self.transform is not None:
+             input_data = self.transform.pre_transform(input_data)
+diff --git a/src/data/make_avg_subset.py b/src/data/make_avg_subset.py
+deleted file mode 100644
+index 3e67fa5..0000000
+--- a/src/data/make_avg_subset.py
++++ /dev/null
+@@ -1,125 +0,0 @@
+-#!/usr/bin/env python3
+-# -*- coding: utf-8 -*-
+-import logging
+-from pathlib import Path
+-import glob
+-import random
+-import os
+-import shutil
+-
+-from clearml import Dataset
+-from clearml import Task
+-
+-import hydra
+-from omegaconf import DictConfig, OmegaConf
+-
+-from src.common.h5_util import load_h5_file, write_data_to_h5
+-import numpy as np
+-import bottleneck as bn
+-import pdb
+-import h5py
+-# TODO change logger to common.util
+-def main() -> None:
+-    """ Runs data processing scripts to turn raw data from input path into
+-        a subset ready for quick training saved in output path.
+-    """
+-    task = Task.init(project_name='t4c', task_name='Moving avg subset')
+-    logger = logging.getLogger(__name__)
+-
+-    args = {
+-        'task_id': '53ec3f01cb1e4385bf0e441551af0452',
+-        'name': '5avg7days',
+-    }
+-
+-    task.connect(args)
+-    print ('Arguments: {}'.format(args))
+-
+-    # get OmegaConf file from ClearML and parse
+-    train_task = Task.get_task(task_id=args['task_id'])
+-    cfg = train_task.get_configuration_object("OmegaConf")
+-    cfg = OmegaConf.create(cfg)
+-    print (cfg)
+-
+-    random.seed(cfg.random_seed)
+-    # uses the name of the yaml file aos dataset folder name
+-    try:
+-        print (abssdf)
+-        Dataset.get(dataset_project="t4c", dataset_name=args['name'])
+-        logger.info('Dataset exists. Skipping dataset creation.')
+-    except:
+-
+-        root_dir = Dataset.get(dataset_project="t4c", dataset_name=cfg.name).get_local_copy()
+-        logger.info('Loading dataset')
+-        input_path = Path(root_dir)
+-        output_path = Path("data/raw/"+args['name'])
+-        if os.path.exists(output_path):
+-            logger.info('Folder exists. Fatal error, exiting!')
+-            # return
+-
+-        avg_term = 5
+-
+-        # loop through the cities and select the required number of samples
+-        # for train set and val set. Note that cities appearing in both train and
+-        # val set is not supported (no guarantees on duplicates)
+-
+-        # for city in cfg.train_set.cities:
+-        #     files = []
+-        #     logger.info('Opening %s files for training set processing', city)
+-
+-        #     if not os.path.exists(output_path/city/'training'):
+-        #         os.makedirs(output_path/city/'training')
+-        #     for file in glob.glob(str(input_path/city/'training'/'*')):
+-        #         files.append(file)
+-
+-        #     for file in files:
+-        #         day_data = load_h5_file(file)
+-
+-        #         day_data = bn.move_mean(day_data, avg_term, axis=0).astype(np.uint8)
+-        #         day_data = day_data[(avg_term-1):,:,:,:]
+-        #         write_data_to_h5(day_data,output_path/city/'training'/Path(file).name)
+-        #     res_file = city+"_map_high_res.h5"
+-        #     static_file = city+"_static.h5"
+-        #     shutil.copy(input_path/city/static_file, output_path/city/static_file)
+-        #     shutil.copy(input_path/city/res_file, output_path/city/res_file)
+-
+-        # val set
+-
+-        # handling the case when there's a single
+-        # validation city.
+-        # TODO handle 1 or more cities well. yaml doesn't parse
+-        # single element list correctly.
+-        if type(cfg.val_set.cities) == str:
+-            cfg.val_set.cities = [cfg.val_set.cities]
+-        for city in cfg.val_set.cities:
+-
+-            files = []
+-            logger.info('Opening %s files for validation set processing', city)
+-
+-            if not os.path.exists(output_path/city/'validation'):
+-                os.makedirs(output_path/city/'validation')
+-            for file in glob.glob(str(input_path/city/'validation'/'*')):
+-                day_data = load_h5_file(file)
+-                day_data = bn.move_mean(day_data, avg_term, axis=0).astype(np.uint8)
+-                day_data = day_data[(avg_term-1):, :, :, :]
+-                write_data_to_h5(day_data, output_path/city/'validation'/Path(file).name)
+-
+-
+-            res_file = city+"_map_high_res.h5"
+-            static_file = city+"_static.h5"
+-
+-            shutil.copy(input_path/city/static_file, output_path/city/static_file)
+-            shutil.copy(input_path/city/res_file, output_path/city/res_file)
+-
+-        # registering clearml dataset
+-        dataset = Dataset.create(dataset_name=args['name'], dataset_project="t4c")
+-
+-        dataset.add_files(path=output_path)
+-        dataset.upload()
+-        dataset.finalize()
+-
+-
+-if __name__ == '__main__':
+-    log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+-    logging.basicConfig(level=logging.INFO, format=log_fmt)
+-
+-    main()
+diff --git a/src/data/transform.py b/src/data/transform.py
+index 03b46e7..19cd226 100644
+--- a/src/data/transform.py
++++ b/src/data/transform.py
+@@ -71,8 +71,8 @@ class UNetTransform(DataTransform):
+             right = width - right
+             bottom = height - bottom
+             data = data[:, :, top:bottom, left:right]
+-        if self.stack_time:
+-             data = self.unstack_on_time(data, batch_dim=True)
++        # if self.stack_time:
++        #     data = self.unstack_on_time(data, batch_dim=True)
+         if not self.post_batch_dim:
+             data = torch.squeeze(data, 0)
+         return data
+diff --git a/src/data/transformwav.py b/src/data/transformwav.py
+index 586422c..04df22c 100644
+--- a/src/data/transformwav.py
++++ b/src/data/transformwav.py
+@@ -52,9 +52,8 @@ class UNetWavTransform(DataTransform):
+ 
+         Yl, Yh = self.xfm(data)
+         if Yl.shape[1] == 96:
+-            #Yh[0][:,:,2,:,:] = 0
+-            Yh[0] = Yh[0][:, :, :self.keep_ch, :, :]
+             data = torch.cat((Yl, Yh[0].reshape(1, data.shape[1]*self.keep_ch, Yl.shape[-2], Yl.shape[-1])), 1)
++            Yh[0] = Yh[0][:, :, :self.keep_ch, :, :]
+         else:
+             data = torch.cat((Yl, Yh[0].reshape(1, data.shape[1]*3, Yl.shape[-2], Yl.shape[-1])), 1)
+         if self.crop_pad is not None:
+diff --git a/src/features/build_features.py b/src/features/build_features.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/src/models/dwt_unet.py b/src/models/dwt_unet.py
+deleted file mode 100644
+index 736980b..0000000
+--- a/src/models/dwt_unet.py
++++ /dev/null
+@@ -1,138 +0,0 @@
+-"""UNet implementation from https://github.com/jvanvugt/pytorch-unet.
+-
+-Copied from https://github.com/mie-lab/traffic4cast/blob/aea6f90e8884c01689c84255c99e96d2b58dc470/models/unet.py with permission
+-"""
+-#  Copyright 2021 Institute of Advanced Research in Artificial Intelligence (IARAI) GmbH.
+-#  IARAI licenses this file to You under the Apache License, Version 2.0
+-#  (the "License"); you may not use this file except in compliance with
+-#  the License. You may obtain a copy of the License at
+-#
+-#  http://www.apache.org/licenses/LICENSE-2.0
+-#  Unless required by applicable law or agreed to in writing, software
+-#  distributed under the License is distributed on an "AS IS" BASIS,
+-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-#  See the License for the specific language governing permissions and
+-#  limitations under the License.
+-from typing import Optional
+-from typing import Tuple
+-
+-import numpy as np
+-import torch
+-from torch import nn
+-
+-import pywt
+-from pytorch_wavelets import DWTForward, DWTInverse
+-import pdb
+-class DWTUNet(nn.Module):
+-    def __init__(
+-        self, in_channels=1, n_classes=2, depth=5, wf=6, padding=False, batch_norm=False, up_mode="upconv",
+-            wave="db7", mode="zero"
+-    ):
+-        """
+-        Implementation of
+-        U-Net: Convolutional Networks for Biomedical Image Segmentation
+-        (Ronneberger et al., 2015)
+-        https://arxiv.org/abs/1505.04597
+-        Using the default arguments will yield the exact version used
+-        in the original paper
+-        Args:
+-            in_channels (int): number of input channels
+-            n_classes (int): number of output channels
+-            depth (int): depth of the network
+-            wf (int): number of filters in the first layer is 2**wf
+-            padding (bool): if True, apply padding such that the input shape
+-                            is the same as the output.
+-                            This may introduce artifacts
+-            batch_norm (bool): Use BatchNorm after layers with an
+-                               activation function
+-            up_mode (str): one of 'upconv' or 'upsample'.
+-                           'upconv' will use transposed convolutions for
+-                           learned upsampling.
+-                           'upsample' will use bilinear upsampling.
+-        """
+-        super(DWTUNet, self).__init__()
+-        assert up_mode in ("upconv", "upsample")
+-        self.padding = padding
+-        self.depth = depth
+-        prev_channels = in_channels
+-        self.down_path = nn.ModuleList()
+-        for i in range(depth):
+-            self.down_path.append(UNetConvBlock(prev_channels, 2 ** (wf + i), padding, batch_norm))
+-            prev_channels = 2 ** (wf + i)
+-
+-        self.up_path = nn.ModuleList()
+-        for i in reversed(range(depth - 1)):
+-            self.up_path.append(UNetUpBlock(prev_channels, 2 ** (wf + i), up_mode, padding, batch_norm))
+-            prev_channels = 2 ** (wf + i)
+-
+-        self.last = nn.Conv2d(prev_channels, n_classes*4, kernel_size=1)
+-
+-        self.xfm = DWTForward(J=1, wave=wave, mode=mode)
+-        self.ifm = DWTInverse(wave=wave, mode=mode)
+-    def forward(self, x, *args, **kwargs):
+-        x = self.xfm(x)
+-        x = torch.cat((x[0], x[1][0].reshape(1, 288, 256, 224)), 1)
+-        blocks = []
+-        for i, down in enumerate(self.down_path):
+-            x = down(x)
+-            if i != len(self.down_path) - 1:
+-                blocks.append(x)
+-                x = torch.nn.functional.max_pool2d(x, 2)
+-
+-        for i, up in enumerate(self.up_path):
+-            x = up(x, blocks[-i - 1])
+-        x=self.last(x)
+-        Yl = x[:, :24,:,:]
+-        Yh = [x[:, 24:,:,:].reshape((1, 24, 3, 256, 224))]
+-        x = self.ifm((Yl, Yh))
+-
+-        return (x[:,:,:-1,:])
+-
+-
+-class UNetConvBlock(nn.Module):
+-    def __init__(self, in_size, out_size, padding, batch_norm):
+-        super(UNetConvBlock, self).__init__()
+-        block = []
+-
+-        block.append(nn.Conv2d(in_size, out_size, kernel_size=3, padding=int(padding)))
+-        block.append(nn.ReLU())
+-        if batch_norm:
+-            block.append(nn.BatchNorm2d(out_size))
+-
+-        block.append(nn.Conv2d(out_size, out_size, kernel_size=3, padding=int(padding)))
+-        block.append(nn.ReLU())
+-        if batch_norm:
+-            block.append(nn.BatchNorm2d(out_size))
+-
+-        self.block = nn.Sequential(*block)
+-
+-    def forward(self, x):  # noqa
+-        out = self.block(x)
+-        return out
+-
+-
+-class UNetUpBlock(nn.Module):
+-    def __init__(self, in_size, out_size, up_mode, padding, batch_norm):
+-        super(UNetUpBlock, self).__init__()
+-        if up_mode == "upconv":
+-            self.up = nn.ConvTranspose2d(in_size, out_size, kernel_size=2, stride=2)
+-        elif up_mode == "upsample":
+-            self.up = nn.Sequential(nn.Upsample(mode="bilinear", scale_factor=2), nn.Conv2d(in_size, out_size, kernel_size=1),)
+-
+-        self.conv_block = UNetConvBlock(in_size, out_size, padding, batch_norm)
+-
+-    def center_crop(self, layer, target_size):
+-        _, _, layer_height, layer_width = layer.size()
+-        diff_y = (layer_height - target_size[0]) // 2
+-        diff_x = (layer_width - target_size[1]) // 2
+-        diff_y_target_size_ = diff_y + target_size[0]
+-        diff_x_target_size_ = diff_x + target_size[1]
+-        return layer[:, :, diff_y:diff_y_target_size_, diff_x:diff_x_target_size_]
+-
+-    def forward(self, x, bridge):  # noqa
+-        up = self.up(x)
+-        crop1 = self.center_crop(bridge, up.shape[2:])
+-        out = torch.cat([up, crop1], 1)
+-        out = self.conv_block(out)
+-
+-        return out
+diff --git a/src/models/eval.py b/src/models/eval.py
+deleted file mode 100644
+index 0c6c19b..0000000
+--- a/src/models/eval.py
++++ /dev/null
+@@ -1,302 +0,0 @@
+-import argparse
+-import binascii
+-import logging
+-import os
+-import random
+-#os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+-import sys
+-from pathlib import Path
+-from typing import Optional
+-import pdb
+-
+-import numpy as np
+-import torch
+-import torch.nn.functional as F  # noqa
+-import torch.optim as optim
+-import tqdm
+-from ignite.contrib.handlers import TensorboardLogger
+-from ignite.contrib.handlers.tensorboard_logger import GradsHistHandler
+-from ignite.contrib.handlers.tqdm_logger import ProgressBar
+-from ignite.engine import create_supervised_evaluator
+-from ignite.engine import create_supervised_trainer
+-from ignite.engine import Engine
+-from ignite.engine import Events
+-from ignite.handlers import Checkpoint
+-from ignite.handlers import DiskSaver
+-from ignite.handlers import global_step_from_engine
+-from ignite.metrics import Loss
+-from ignite.metrics import RunningAverage
+-from torch.utils.data import DataLoader
+-from torch.utils.data import SubsetRandomSampler
+-
+-from src.data.dataset import T4CDataset
+-
+-import matplotlib.pyplot as plt
+-from PIL import Image
+-
+-from sklearn.metrics import mean_squared_error
+-
+-from pytorch_wavelets import DWTForward, DWTInverse # (or import DWT, IDWT)
+-import matplotlib.animation as animation
+-
+-from hydra import initialize, initialize_config_module, initialize_config_dir, compose
+-from hydra.utils import instantiate
+-from omegaconf import OmegaConf
+-
+-from clearml import Dataset, Task
+-perm = [[0,1,2,3,4,5,6,7],
+-        [2,3,4,5,6,7,0,1],
+-        [4,5,6,7,0,1,2,3],
+-        [6,7,0,1,2,3,4,5]
+-        ]
+-
+-def reset_seeds(seed):
+-    random.seed(seed)
+-    np.random.seed(seed)
+-    torch.manual_seed(seed)
+-    torch.cuda.manual_seed_all(seed)
+-    torch.backends.cudnn.deterministic = True
+-    torch.backends.cudnn.benchmark = False
+-    os.environ['PYTHONHASHSEED'] = str(seed)
+-def fig2img(fig):
+-    """Convert a Matplotlib figure to a PIL Image and return it"""
+-    import io
+-    buf = io.BytesIO()
+-    fig.savefig(buf)
+-    buf.seek(0)
+-    img = Image.open(buf)
+-    return img.convert('RGB')
+-
+-def get_ani(mat):
+-    fig, ax = plt.subplots(figsize=(8, 8))
+-    imgs = []
+-    for img in mat:
+-        img = ax.imshow(img, animated=True, vmax=np.median(img.flatten())+50)
+-        imgs.append([img])
+-    ani = animation.ArtistAnimation(fig, imgs, interval=1000, blit=True, repeat_delay=3000)
+-    return ani.to_html5_video()
+-
+-def plot_tmaps(true, pred, viz_dir, logger):
+-    for dir in viz_dir:
+-        fig = plt.figure(figsize=(50, 35))
+-
+-        # setting values to rows and column variables
+-        rows = 2
+-        columns = pred.shape[0]
+-        for t_step in range(pred.shape[0]):
+-
+-            # reading images
+-
+-
+-            # Adds a subplot at the 1st position
+-            fig.add_subplot(rows, columns, t_step+1)
+-
+-            # showing image
+-            _ = plt.imshow(pred[t_step,:,:,dir])
+-            plt.axis('off')
+-
+-        plt.title("pred")
+-
+-        for t_step in range(true.shape[0]):
+-
+-            # Adds a subplot at the 1st position
+-            fig.add_subplot(rows, columns, t_step+pred.shape[0]+1)
+-            # showing image
+-            _ = plt.imshow(true[t_step,:,:,dir])
+-            plt.axis('off')
+-
+-        plt.title("true")
+-        plt.close()
+-
+-        logger.current_logger().report_image("viz", "images", iteration=dir, image=fig2img(fig))
+-
+-        logger.current_logger().report_media(
+-                "viz", "true frames", iteration=dir, stream=get_ani(true[:,:,:,dir]), file_extension='html')
+-
+-        logger.current_logger().report_media(
+-                "viz", "pred frames", iteration=dir, stream=get_ani(pred[:,:,:,dir]), file_extension='html')
+-
+-
+-def plot_dims(logger, true_series, pred_series, dim=8):
+-
+-    x = list(range(true_series.shape[0]))
+-
+-    for i in range(0, true_series.shape[-1]):
+-        logger.current_logger().report_scatter2d(
+-        str(i),
+-        "true",
+-        iteration=0,
+-        scatter=np.dstack((x, true_series[:,i])).squeeze(),
+-        xaxis="t",
+-        yaxis="count",
+-        mode='lines+markers'
+-    )
+-        logger.current_logger().report_scatter2d(
+-            str(i),
+-            "pred",
+-            iteration=0,
+-            scatter=np.dstack((x, pred_series[:,i])).squeeze(),
+-            xaxis="t",
+-            yaxis="count",
+-            mode='lines+markers'
+-        )
+-
+-
+-def unstack_on_time(data: torch.Tensor, batch_dim:bool = False, num_channels=4):
+-        """
+-        `(k, 12 * 8, 495, 436) -> (k, 12, 495, 436, 8)`
+-        """
+-        _, _, height, width = data.shape
+-        if not batch_dim:
+-            # `(12, 495, 436, 8) -> (1, 12, 495, 436, 8)`
+-            data = torch.unsqueeze(data, 0)
+-
+-        num_time_steps = int(data.shape[1] / num_channels)
+-        # (k, 12 * 8, 495, 436) -> (k, 12, 8, 495, 436)
+-        data = torch.reshape(data, (data.shape[0],
+-                                    num_time_steps,
+-                                    num_channels,
+-                                    height,
+-                                    width))
+-
+-        # (k, 12, 8, 495, 436) -> (k, 12, 495, 436, 8)
+-        data = torch.moveaxis(data, 2, 4)
+-
+-        if not batch_dim:
+-            # `(1, 12, 495, 436, 8) -> (12, 495, 436, 8)`
+-            data = torch.squeeze(data, 0)
+-        return data
+-
+-"""
+-Provides evaluation information for a given model and dataset.
+-Information include
+-- MSE
+-- Single pixel time series
+-- Single sample true and predicted traffic maps
+-"""
+-def main():
+-    reset_seeds(123)
+-    task = Task.init(project_name="t4c_eval", task_name="Model Evaluation")
+-    logger = task.get_logger()
+-    args = {
+-        'task_id': '9be6fe52a8c44efe8052bfd4e24f2351',
+-        'batch_size': 1,
+-        'num_workers': 0,
+-        'pixel': (108, 69),
+-        'loader': 'val',
+-        'num_channels': 4,
+-        'viz_dir': [0,1,2,3],
+-        'viz_idx': 0
+-    }
+-
+-    task.connect(args)
+-    print ('Arguments: {}'.format(args))
+-
+-    # get OmegaConf file from ClearML and parse
+-    train_task = Task.get_task(task_id=args['task_id'])
+-    cfg = train_task.get_configuration_object("OmegaConf")
+-    cfg = OmegaConf.create(cfg)
+-    print (cfg)
+-    # instantiate model
+-    try:
+-        root_dir = Dataset.get(dataset_project="t4c", dataset_name=cfg.model.dataset.root_dir).get_local_copy()
+-    except:
+-        print("Could not find dataset in clearml server. Exiting!")
+-
+-    model = instantiate(cfg.model, dataset={"root_dir":root_dir})
+-    model_path = train_task.artifacts['model_checkpoint'].get_local_copy()
+-    network = model.network
+-    network = network.to('cuda')
+-    #model_state_dict = torch.load(model_path)
+-    model_state_dict = torch.load(model_path+'/'+os.listdir(model_path)[0])#,map_location=torch.device('cpu'))
+-    network.load_state_dict(model_state_dict['train_model'])
+-    network.eval()
+-
+-    max_idx = 240
+-    bs = args['batch_size']
+-    d = args['num_channels']
+-    #dataloader_config = configs[model_str].get("dataloader_config", {})
+-    if args['loader'] == 'val':
+-        loader = DataLoader(model.v_dataset, batch_size=bs, num_workers=args['num_workers'], shuffle=False)
+-    else:
+-        loader = DataLoader(model.t_dataset, batch_size=bs, num_workers=args['num_workers'], shuffle=False)
+-    print ('Dataloader first few files: {}'.format(loader.dataset.files[:10]))
+-    trues = np.zeros((max_idx, d))
+-    preds = np.zeros((max_idx, d))
+-
+-
+-    mse=[]
+-    msenz=[]
+-    mse1=[]
+-    mse2=[]
+-
+-    pixel_x, pixel_y = args['pixel']
+-    try:
+-        mode = cfg.model.dataset.transform.mode
+-        wave = cfg.model.dataset.transform.wave
+-        xfm = DWTForward(J=1, mode=mode, wave=wave)  # Accepts all wave types available to PyWavelets
+-        ifm = DWTInverse(mode=mode, wave=wave)
+-        is_waveTransform = True
+-    except:
+-        is_waveTransform = False
+-
+-    print ('Wavelet Transform: {}'.format(is_waveTransform))
+-
+-    #pixel_x, pixel_y = 101,132#108, 69
+-    pixel_x, pixel_y = 108, 69
+-    t = 0
+-
+-
+-    for idx, i in (enumerate(loader)):
+-        batch_prediction = network(i[0].to('cuda'))
+-        batch_prediction = batch_prediction.cpu().detach()#.numpy()
+-
+-        pred = model.t_dataset.transform.post_transform(batch_prediction)
+-        true = model.t_dataset.transform.post_transform(i[1])
+-        pdb.set_trace()
+-
+-        # pred1 = pred[:,:,:,:,::2]
+-        # true1 = true[:,:,:,:,::2]
+-        # pred2 = pred[:,:,:,:,1::2]
+-        # true2 = true[:,:,:,:,1::2]
+-        if is_waveTransform:
+-            _,_,rh,rw = pred.shape
+-            Yl = pred[:, :24,:,:]
+-            Yh = [pred[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
+-            #Yh[0][:,:,:,:,:] = 0
+-            pred = ifm((Yl, Yh))
+-
+-            Yl = true[:, :24,:,:]
+-            Yh = [true[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
+-            true = ifm((Yl, Yh))
+-
+-        mse.append(mean_squared_error(pred.flatten(), true.flatten()))
+-        # mse1.append(mean_squared_error(pred1.flatten(), true1.flatten()))
+-        # mse2.append(mean_squared_error(pred2.flatten(), true2.flatten()))
+-
+-        if idx>=max_idx/bs:
+-            continue
+-        else:
+-            if is_waveTransform:
+-                true = unstack_on_time(true[:,:,:-1,:], d)
+-                pred = unstack_on_time(pred[:,:,:-1,:], d)
+-
+-            p_pred = (pred[:,t, pixel_x, pixel_y, :].numpy())
+-            p_true = (true[:,t, pixel_x, pixel_y, :].numpy())
+-            trues[idx*bs:idx*bs+bs] = p_true
+-            preds[idx*bs:idx*bs+bs] = p_pred
+-
+-        if idx==args['viz_idx']:
+-            plot_tmaps(true[0].numpy(), pred[0].numpy(), args['viz_dir'], logger)
+-        #msenz.append(mse_func(pred.flatten(), true.flatten(), nonzero))
+-        #trues.extend(p_true)
+-        #preds.extend(p_pred)
+-        #if idx==240:
+-        #break
+-    print (mse)
+-    print("Overall MSE: {}".format(sum(mse)/len(mse)))
+-    # print("MSE vol: {}".format(sum(mse1)/len(mse1)))
+-    # print("MSE speed: {}".format(sum(mse2)/len(mse2)))
+-    plot_dims(logger, trues, preds, d)
+-if __name__ == "__main__":
+-    main()
+diff --git a/src/models/eval_dir.py b/src/models/eval_dir.py
+deleted file mode 100644
+index 1136d65..0000000
+--- a/src/models/eval_dir.py
++++ /dev/null
+@@ -1,323 +0,0 @@
+-import argparse
+-import binascii
+-import logging
+-import os
+-import random
+-#os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+-import sys
+-from pathlib import Path
+-from typing import Optional
+-import pdb
+-
+-import numpy as np
+-import torch
+-import torch.nn.functional as F  # noqa
+-import torch.optim as optim
+-import tqdm
+-from ignite.contrib.handlers import TensorboardLogger
+-from ignite.contrib.handlers.tensorboard_logger import GradsHistHandler
+-from ignite.contrib.handlers.tqdm_logger import ProgressBar
+-from ignite.engine import create_supervised_evaluator
+-from ignite.engine import create_supervised_trainer
+-from ignite.engine import Engine
+-from ignite.engine import Events
+-from ignite.handlers import Checkpoint
+-from ignite.handlers import DiskSaver
+-from ignite.handlers import global_step_from_engine
+-from ignite.metrics import Loss
+-from ignite.metrics import RunningAverage
+-from torch.utils.data import DataLoader
+-from torch.utils.data import SubsetRandomSampler
+-
+-from src.data.dataset import T4CDataset
+-
+-
+-
+-import matplotlib.animation as animation
+-from PIL import Image
+-import matplotlib.pyplot as plt
+-
+-from sklearn.metrics import mean_squared_error
+-
+-from pytorch_wavelets import DWTForward, DWTInverse # (or import DWT, IDWT)
+-
+-
+-from hydra import initialize, initialize_config_module, initialize_config_dir, compose
+-from hydra.utils import instantiate
+-from omegaconf import OmegaConf
+-
+-from clearml import Dataset, Task
+-perm = np.array([[0,1,2,3,4,5,6,7],
+-        [2,3,4,5,6,7,0,1],
+-        [4,5,6,7,0,1,2,3],
+-        [6,7,0,1,2,3,4,5]
+-        ])
+-
+-def reset_seeds(seed):
+-    random.seed(seed)
+-    np.random.seed(seed)
+-    torch.manual_seed(seed)
+-    torch.cuda.manual_seed_all(seed)
+-    torch.backends.cudnn.deterministic = True
+-    torch.backends.cudnn.benchmark = False
+-    os.environ['PYTHONHASHSEED'] = str(seed)
+-def fig2img(fig):
+-    """Convert a Matplotlib figure to a PIL Image and return it"""
+-    import io
+-    buf = io.BytesIO()
+-    fig.savefig(buf)
+-    buf.seek(0)
+-    img = Image.open(buf)
+-    return img.convert('RGB')
+-
+-def get_ani(mat):
+-    fig, ax = plt.subplots(figsize=(8, 8))
+-    imgs = []
+-    for img in mat:
+-        img = ax.imshow(img, animated=True, vmax=np.median(img.flatten())+50)
+-        imgs.append([img])
+-    ani = animation.ArtistAnimation(fig, imgs, interval=1000, blit=True, repeat_delay=3000)
+-    return ani.to_html5_video()
+-
+-def plot_tmaps(true, pred, viz_dir, logger):
+-    for dir in viz_dir:
+-        fig = plt.figure(figsize=(50, 35))
+-
+-        # setting values to rows and column variables
+-        rows = 2
+-        columns = pred.shape[0]
+-        for t_step in range(pred.shape[0]):
+-
+-            # reading images
+-
+-
+-            # Adds a subplot at the 1st position
+-            fig.add_subplot(rows, columns, t_step+1)
+-
+-            # showing image
+-            _ = plt.imshow(pred[t_step,:,:,dir])
+-            plt.axis('off')
+-
+-        plt.title("pred")
+-
+-        for t_step in range(true.shape[0]):
+-
+-            # Adds a subplot at the 1st position
+-            fig.add_subplot(rows, columns, t_step+pred.shape[0]+1)
+-            # showing image
+-            _ = plt.imshow(true[t_step,:,:,dir])
+-            plt.axis('off')
+-
+-        plt.title("true")
+-        plt.close()
+-
+-        logger.current_logger().report_image("viz", "images", iteration=dir, image=fig2img(fig))
+-
+-        logger.current_logger().report_media(
+-                "viz", "true frames", iteration=dir, stream=get_ani(true[:,:,:,dir]), file_extension='html')
+-
+-        logger.current_logger().report_media(
+-                "viz", "pred frames", iteration=dir, stream=get_ani(pred[:,:,:,dir]), file_extension='html')
+-
+-
+-def plot_dims(logger, true_series, pred_series, dim=8):
+-
+-    x = list(range(true_series.shape[0]))
+-
+-    for i in range(0, true_series.shape[-1]):
+-        logger.current_logger().report_scatter2d(
+-        str(i),
+-        "true",
+-        iteration=0,
+-        scatter=np.dstack((x, true_series[:,i])).squeeze(),
+-        xaxis="t",
+-        yaxis="count",
+-        mode='lines+markers'
+-    )
+-        logger.current_logger().report_scatter2d(
+-            str(i),
+-            "pred",
+-            iteration=0,
+-            scatter=np.dstack((x, pred_series[:,i])).squeeze(),
+-            xaxis="t",
+-            yaxis="count",
+-            mode='lines+markers'
+-        )
+-
+-
+-
+-
+-def unstack_on_time(data: torch.Tensor, batch_dim:bool = False, num_channels=4):
+-        """
+-        `(k, 12 * 8, 495, 436) -> (k, 12, 495, 436, 8)`
+-        """
+-        _, _, height, width = data.shape
+-        if not batch_dim:
+-            # `(12, 495, 436, 8) -> (1, 12, 495, 436, 8)`
+-            data = torch.unsqueeze(data, 0)
+-
+-        num_time_steps = int(data.shape[1] / num_channels)
+-        # (k, 12 * 8, 495, 436) -> (k, 12, 8, 495, 436)
+-        data = torch.reshape(data, (data.shape[0],
+-                                    num_time_steps,
+-                                    num_channels,
+-                                    height,
+-                                    width))
+-
+-        # (k, 12, 8, 495, 436) -> (k, 12, 495, 436, 8)
+-        data = torch.moveaxis(data, 2, 4)
+-
+-        if not batch_dim:
+-            # `(1, 12, 495, 436, 8) -> (12, 495, 436, 8)`
+-            data = torch.squeeze(data, 0)
+-        return data
+-
+-"""
+-Produces dimension-MSE error plots for the following
+-case:
+-- avg train tensor decomposition and avg train tensor reconstruction
+-- avg train tensor decomposition and random train tensor reconstruction
+-- avg train tensor decomposition and avg val tensor reconstruction
+-- avg train tensor decomposition and random val tensor reconstruction
+-- avg val tensor decomposition and avg val tensor reconstruction
+-- avg val tensor decomposition and random val tensor reconstruction
+-"""
+-def main():
+-    reset_seeds(123)
+-    task = Task.init(project_name="t4c_eval", task_name="Model Evaluation")
+-    logger = task.get_logger()
+-    args = {
+-        'task_id': '9be6fe52a8c44efe8052bfd4e24f2351',
+-        'batch_size': 1,
+-        'num_workers': 0,
+-        'pixel': (108, 69),
+-        'loader': 'val',
+-        'num_channels': 4,
+-        'viz_dir': [0,1,2,3],
+-        'viz_idx': 0
+-    }
+-
+-    task.connect(args)
+-    print ('Arguments: {}'.format(args))
+-
+-    # get OmegaConf file from ClearML and parse
+-    train_task = Task.get_task(task_id=args['task_id'])
+-    cfg = train_task.get_configuration_object("OmegaConf")
+-    cfg = OmegaConf.create(cfg)
+-    print (cfg)
+-    # instantiate model
+-    try:
+-        root_dir = Dataset.get(dataset_project="t4c", dataset_name=cfg.model.dataset.root_dir).get_local_copy()
+-    except:
+-        print("Could not find dataset in clearml server. Exiting!")
+-
+-    model = instantiate(cfg.model, dataset={"root_dir":root_dir})
+-    #model_path = train_task.artifacts['model_checkpoint'].get_local_copy()
+-    model_path = "/data/best1dir.pt"
+-    network = model.network
+-    network = network.to('cuda')
+-    model_state_dict = torch.load(model_path)
+-    #model_state_dict = torch.load(model_path+'/'+os.listdir(model_path)[0])#,map_location=torch.device('cpu'))
+-    network.load_state_dict(model_state_dict['train_model'])
+-    network.eval()
+-
+-    max_idx = 240
+-    bs = args['batch_size']
+-    d = args['num_channels']
+-    #dataloader_config = configs[model_str].get("dataloader_config", {})
+-    if args['loader'] == 'val':
+-        loader = DataLoader(model.v_dataset, batch_size=bs, num_workers=args['num_workers'], shuffle=False)
+-    else:
+-        loader = DataLoader(model.t_dataset, batch_size=bs, num_workers=args['num_workers'], shuffle=False)
+-    print ('Dataloader first few files: {}'.format(loader.dataset.files[:10]))
+-    trues = np.zeros((max_idx, d))
+-    preds = np.zeros((max_idx, d))
+-
+-
+-    mse=[]
+-    msenz=[]
+-    mse1=[]
+-    mse2=[]
+-
+-    pixel_x, pixel_y = args['pixel']
+-    try:
+-        mode = cfg.model.dataset.transform.mode
+-        wave = cfg.model.dataset.transform.wave
+-        xfm = DWTForward(J=1, mode=mode, wave=wave)  # Accepts all wave types available to PyWavelets
+-        ifm = DWTInverse(mode=mode, wave=wave)
+-        is_waveTransform = True
+-    except:
+-        is_waveTransform = False
+-
+-    print ('Wavelet Transform: {}'.format(is_waveTransform))
+-
+-    #pixel_x, pixel_y = 101,132#108, 69
+-    pixel_x, pixel_y = 108, 69
+-    t = 0
+-
+-    pred_comb = np.zeros((bs, 6, 495, 436, d))
+-    true_comb = np.zeros((bs, 6, 495, 436, d))
+-    for idx, i in (enumerate(loader)):
+-        for directions in range(4):
+-            switch = perm[directions]
+-            for c in range(1,12): switch = np.vstack([switch, perm[directions]+(8*c)])
+-            inp = i[0][:,switch.flatten(),:,:]
+-            outp = i[1][:,directions::4, :,:]
+-            batch_prediction = network(inp.to('cuda'))
+-            batch_prediction = batch_prediction.cpu().detach()#.numpy()
+-
+-            pred = model.t_dataset.transform.post_transform(batch_prediction)
+-            true = model.t_dataset.transform.post_transform(outp)
+-            pred_comb[:, :, :, :,directions:directions+1] = pred.numpy()
+-            true_comb[:, :, :, :,directions:directions+1] = true.numpy()
+-
+-
+-        # pred1 = pred[:,:,:,:,::2]
+-        # true1 = true[:,:,:,:,::2]
+-        # pred2 = pred[:,:,:,:,1::2]
+-        # true2 = true[:,:,:,:,1::2]
+-            if is_waveTransform:
+-                _,_,rh,rw = pred.shape
+-                Yl = pred[:, :24,:,:]
+-                Yh = [pred[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
+-                #Yh[0][:,:,:,:,:] = 0
+-                pred = ifm((Yl, Yh))
+-
+-                Yl = true[:, :24,:,:]
+-                Yh = [true[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
+-                true = ifm((Yl, Yh))
+-
+-        try:
+-            mse.append(mean_squared_error(pred_comb.flatten(), true_comb.flatten()))
+-        except:
+-            print ("Failed in mse calc!")
+-
+-        if idx == args['viz_idx']:
+-            plot_tmaps(true_comb[0], pred_comb[0], args['viz_dir'], logger)
+-        # mse1.append(mean_squared_error(pred1.flatten(), true1.flatten()))
+-        # mse2.append(mean_squared_error(pred2.flatten(), true2.flatten()))
+-
+-        if idx>=max_idx/bs:
+-            continue
+-        else:
+-        #     if is_waveTransform:
+-        #         true = unstack_on_time(true[:,:,:-1,:], d)
+-        #         pred = unstack_on_time(pred[:,:,:-1,:], d)
+-
+-             p_pred = (pred_comb[:,t, pixel_x, pixel_y, :])
+-             p_true = (true_comb[:,t, pixel_x, pixel_y, :])
+-             trues[idx*bs:idx*bs+bs] = p_true
+-             preds[idx*bs:idx*bs+bs] = p_pred
+-
+-        #msenz.append(mse_func(pred.flatten(), true.flatten(), nonzero))
+-        #trues.extend(p_true)
+-        #preds.extend(p_pred)
+-        #if idx==240:
+-        #break
+-    print (mse)
+-    print("Overall MSE: {}".format(sum(mse)/len(mse)))
+-    # print("MSE vol: {}".format(sum(mse1)/len(mse1)))
+-    # print("MSE speed: {}".format(sum(mse2)/len(mse2)))
+-    plot_dims(logger, trues, preds, d)
+-if __name__ == "__main__":
+-    main()
+diff --git a/src/models/predict_model.py b/src/models/predict_model.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/src/models/viz.py b/src/models/viz.py
+deleted file mode 100644
+index c3a823a..0000000
+--- a/src/models/viz.py
++++ /dev/null
+@@ -1,22 +0,0 @@
+-#!/usr/bin/env python3
+-import matplotlib.pyplot as plt
+-import numpy as np
+-
+-from clearml import Task, Logger
+-
+-
+-
+-
+-task = Task.init(project_name="t4c_eval", task_name="Model img test")
+-logger = task.get_logger()
+-fig = plt.figure(figsize=(10, 7))
+-m = np.random.randn(496,448)
+-# setting values to rows and column variables
+-rows = 2
+-columns = 2
+-
+-# reading images
+-
+-logger.current_logger().report_image("image", "image float", iteration=0, image=m)
+-logger.current_logger().report_image("image", "image float", iteration=0, image=m)
+-logger.current_logger().report_image("image", "image float", iteration=1, image=m)
+diff --git a/src/visualization/visualize.py b/src/visualization/visualize.py
+new file mode 100644
+index 0000000..e5a0d9b
+--- /dev/null
++++ b/src/visualization/visualize.py
+@@ -0,0 +1 @@
++#!/usr/bin/env python3
+diff --git a/true.p b/true.p
+deleted file mode 100644
+index 8f53587..0000000
+Binary files a/true.p and /dev/null differ

@@ -64,8 +64,9 @@ class UNet(nn.Module):
             prev_channels = 2 ** (wf + i)
 
         self.last = nn.Conv2d(prev_channels, n_classes, kernel_size=1)
+        self.criterion = nn.MSELoss()
 
-    def forward(self, x, *args, **kwargs):
+    def forward(self, x, y, *args, **kwargs):
         blocks = []
         for i, down in enumerate(self.down_path):
             x = down(x)
@@ -75,8 +76,8 @@ class UNet(nn.Module):
 
         for i, up in enumerate(self.up_path):
             x = up(x, blocks[-i - 1])
-        x=self.last(x)
-        return x
+        x = self.last(x)
+        return (self.criterion(x, y), x)
 
 
 class UNetConvBlock(nn.Module):
