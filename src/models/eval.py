@@ -58,6 +58,13 @@ def reset_seeds(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     os.environ['PYTHONHASHSEED'] = str(seed)
+
+def seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
+
+
 def fig2img(fig):
     """Convert a Matplotlib figure to a PIL Image and return it"""
     import io
@@ -179,7 +186,7 @@ def main():
     task = Task.init(project_name="t4c_eval", task_name="Model Evaluation")
     logger = task.get_logger()
     args = {
-        'task_id': '9be6fe52a8c44efe8052bfd4e24f2351',
+        'task_id': '8c6d6d71524b4ac59949668d0ce66d9e',
         'batch_size': 1,
         'num_workers': 0,
         'pixel': (108, 69),
@@ -216,11 +223,16 @@ def main():
     bs = args['batch_size']
     d = args['num_channels']
     #dataloader_config = configs[model_str].get("dataloader_config", {})
+
+    g = torch.Generator()
+    g.manual_seed(123)
+
     if args['loader'] == 'val':
-        loader = DataLoader(model.v_dataset, batch_size=bs, num_workers=args['num_workers'], shuffle=False)
+        loader = DataLoader(model.v_dataset, batch_size=bs, num_workers=args['num_workers'], worker_init_fn=seed_worker, generator=g, shuffle=False)
     else:
-        loader = DataLoader(model.t_dataset, batch_size=bs, num_workers=args['num_workers'], shuffle=False)
-    print ('Dataloader first few files: {}'.format(loader.dataset.files[:10]))
+        loader = DataLoader(model.t_dataset, batch_size=bs, num_workers=args['num_workers'], worker_init_fn=seed_worker, generator=g, shuffle=False)
+    print ('Dataloader first few files: {}'.format(loader.dataset.file_list[:10]))
+
     trues = np.zeros((max_idx, d))
     preds = np.zeros((max_idx, d))
 
@@ -253,7 +265,6 @@ def main():
 
         pred = model.t_dataset.transform.post_transform(batch_prediction)
         true = model.t_dataset.transform.post_transform(i[1])
-        pdb.set_trace()
 
         # pred1 = pred[:,:,:,:,::2]
         # true1 = true[:,:,:,:,::2]

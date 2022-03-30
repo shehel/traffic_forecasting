@@ -25,7 +25,7 @@ import torch
 import torch.nn.functional as F  # noqa
 import torch.optim as optim
 from ignite.contrib.handlers import TensorboardLogger
-from ignite.contrib.handlers.tensorboard_logger import GradsHistHandler
+from ignite.contrib.handlers.tensorboard_logger import GradsHistHandler, GradsScalarHandler, WeightsScalarHandler
 from ignite.contrib.handlers.tqdm_logger import ProgressBar
 from ignite.engine import create_supervised_evaluator
 from ignite.engine import create_supervised_trainer
@@ -69,9 +69,11 @@ def reset_seeds(seed):
     torch.backends.cudnn.benchmark = False
     os.environ['PYTHONHASHSEED'] = str(seed)
 
+
 def run_model(
     task: Task,
     model: Model,
+    optimizer: optim,
     cfg: DictConfig,
     valset: bool
 ):  # noqa
@@ -164,7 +166,6 @@ def run_model(
             logging.info(f"Let's use {len(model.network.device_ids)} GPUs: {model.network.device_ids}!")
             device = f"cuda:{model.network.device_ids[0]}"
 
-    optimizer = optim.Adam(model.network.parameters(), lr = cfg.optimizer.lr)
 
     model.network = model.network.to(cfg.device)
 
@@ -200,7 +201,7 @@ def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loade
         # logging.info(system_status()
 
     @trainer.on(Events.EPOCH_COMPLETED)  # noqa
-    @trainer.on(Events.STARTED)  # noqa
+    #@trainer.on(Events.STARTED)  # noqa
     def log_epoch_summary(engine: Engine):
         # Training
         train_evaluator.run(train_eval_loader)
@@ -218,7 +219,8 @@ def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loade
         # logging.info(system_status())
 
     tb_logger = TensorboardLogger(log_dir=logs_path)
-    tb_logger.attach(trainer, log_handler=GradsHistHandler(train_model), event_name=Events.ITERATION_COMPLETED)
+    #tb_logger.attach(trainer, log_handler=GradsScalarHandler(train_model), event_name=Events.ITERATION_COMPLETED(every=200))
+    tb_logger.attach(trainer, log_handler=WeightsScalarHandler(train_model), event_name=Events.ITERATION_COMPLETED(every=10))
     tb_logger.attach_output_handler(
         train_evaluator, event_name=Events.EPOCH_COMPLETED, tag="train", metric_names=["loss"], global_step_transform=global_step_from_engine(trainer)
     )
@@ -230,13 +232,16 @@ def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loade
         global_step_transform=global_step_from_engine(trainer),
     )
     to_save = {"train_model": train_model, "optimizer": optimizer}
-    #checkpoint_handler = Checkpoint(to_save, DiskSaver(checkpoints_dir, create_dir=True, require_empty=False), n_saved=1)
-    checkpoint_handler = save_best_model_by_val_score(checkpoints_dir, validation_evaluator, to_save,
-                                                      metric_name="neg_val_loss", n_saved=1, trainer=trainer)
+    checkpoint_handler = Checkpoint(to_save, DiskSaver(checkpoints_dir, create_dir=True, require_empty=False), n_saved=20)
+    #checkpoint_handler = save_best_model_by_val_score(checkpoints_dir, validation_evaluator, to_save,
+    #                                                  metric_name="neg_val_loss", n_saved=1, trainer=trainer)
     validation_evaluator.add_event_handler(Events.COMPLETED, checkpoint_handler)
     # Run Training
     logging.info("Start training of train_model %s on %s for %s epochs", train_model, device, epochs)
     logging.info(f"tensorboard --logdir={artifacts_path}")
+
+    # To get better trace of Nan events
+    torch.autograd.set_detect_anomaly(True)
 
     trainer.run(train_loader, max_epochs=epochs)
     pbar.close()
@@ -261,6 +266,7 @@ def main(cfg: DictConfig):
         root_dir = cfg.model.dataset.root_dir
 
     model = instantiate(cfg.model, dataset={"root_dir":root_dir})
+    optimizer = optim.Adam(model.network.parameters(), lr = cfg.train.optimizer.lr)
     logging.info("Model instantiated.")
 
     # competitions = args.competitions
@@ -272,12 +278,16 @@ def main(cfg: DictConfig):
     # TODO Model restricted to unet.
     if cfg.train.resume_checkpoint is not None:
         logging.info("Reload checkpoint %s", cfg.train.resume_checkpoint)
-        load_torch_model_from_checkpoint(checkpoint=cfg.train.resume_checkpoint, model=model.network)
+        #load_torch_model_from_checkpoint(checkpoint=cfg.train.resume_checkpoint, model=model.network)
+        to_load = {"train_model": model.network}
+        checkpoint = torch.load(cfg.train.resume_checkpoint)
+        Checkpoint.load_objects(to_load, checkpoint)
+
 
     logging.info("Going to run train_model.")
     # logging.info(system_status())
     run_model(
-        task=task, model=model, cfg=cfg.train, valset=cfg.model.valset)
+        task=task, model=model, optimizer=optimizer, cfg=cfg.train, valset=cfg.model.valset)
 
     # for competition in competitions:
     #     additional_args = {}

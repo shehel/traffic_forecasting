@@ -77,6 +77,7 @@ class T4CDataset(Dataset):
         self.reduced = reduced
         self.single_channel = single_channel
         self.time_step = time_step
+        self.file_list = None
         if self.reduced:
             preprocess_task = Task.get_task(task_id=factors_task_id)
             with open(preprocess_task.artifacts['trainset factors'].get_local_copy(), 'rb') as file:
@@ -85,8 +86,9 @@ class T4CDataset(Dataset):
 
     def _load_dataset(self):
 
-        file_list = list(Path(self.root_dir).rglob(self.file_filter))
-        for file in file_list:
+        self.file_list = list(Path(self.root_dir).rglob(self.file_filter))
+        self.file_list.sort()
+        for file in self.file_list:
             self.files.append(load_h5_file(file))
         self.len = len(self.files) * MAX_TEST_SLOT_INDEX
 

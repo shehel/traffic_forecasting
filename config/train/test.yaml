@@ -2,10 +2,10 @@ random_seed: 123
 
 train_fraction: 1
 val_fraction: 0
-resume_checkpoint: "/home/shehel/waste/resume.pt"
+resume_checkpoint: null
 device: 'cuda'
-epochs: 30
-data_parallel: true
+epochs: 10
+data_parallel:
 device_ids:
 amp_mode:
 optimizer:
