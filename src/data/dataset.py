@@ -42,7 +42,8 @@ class T4CDataset(Dataset):
 
             reduced: bool = False,
             factors_task_id: str = None,
-            single_channel: int = None
+            single_channel: int = None,
+            time_step: int = None,
     ):
         """torch dataset from training data.
         Parameters
@@ -75,6 +76,7 @@ class T4CDataset(Dataset):
         self.output_step = output_step
         self.reduced = reduced
         self.single_channel = single_channel
+        self.time_step = time_step
         if self.reduced:
             preprocess_task = Task.get_task(task_id=factors_task_id)
             with open(preprocess_task.artifacts['trainset factors'].get_local_copy(), 'rb') as file:
@@ -120,8 +122,11 @@ class T4CDataset(Dataset):
 
         output_data = output_data[:,:,:,self.output_start::self.output_step]
 
-        if self.single_channel:
+        if self.single_channel is not None:
             output_data = output_data[:,:,:,self.single_channel:self.single_channel+1]
+
+        if self.time_step is not None:
+            output_data = output_data[self.time_step:self.time_step+1,:,:,:]
 
         if self.transform is not None:
             input_data = self.transform.pre_transform(input_data)
