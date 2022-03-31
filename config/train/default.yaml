@@ -2,17 +2,18 @@ random_seed: 123
 
 train_fraction: 1
 val_fraction: 0
-resume_checkpoint: "/home/shehel/waste/resume.pt"
+resume_checkpoint:
 device: 'cuda'
 epochs: 30
 data_parallel: true
 device_ids:
-amp_mode:
+amp_mode: amp
+scaler: true
 optimizer:
   lr: 1e-4
   weight_decay: 0.0001
 dataloader:
   shuffle: True
-  batch_size: 1
+  batch_size: 16
   num_workers: 4
   train_eval: 1000

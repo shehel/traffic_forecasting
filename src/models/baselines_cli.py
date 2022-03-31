@@ -153,27 +153,11 @@ def run_model(
         val_loader = DataLoader(model.t_dataset, batch_size=cfg.dataloader.batch_size,
                             num_workers=cfg.dataloader.num_workers, sampler=dev_sampler)
 
-    if cfg.device is None:
-        logging.warning("device not set, torturing CPU.")
-        device = "cpu"
-        # TODO data parallelism and whitelist
-
-    if torch.cuda.is_available() and cfg.data_parallel:
-        # https://pytorch.org/tutorials/beginner/blitz/data_parallel_tutorial.html
-        if torch.cuda.device_count() > 1:
-            # https://stackoverflow.com/questions/59249563/runtimeerror-module-must-have-its-parameters-and-buffers-on-device-cuda1-devi
-            model.network = torch.nn.DataParallel(model.network, device_ids=cfg.device_ids)
-            logging.info(f"Let's use {len(model.network.device_ids)} GPUs: {model.network.device_ids}!")
-            device = f"cuda:{model.network.device_ids[0]}"
-
-
-    model.network = model.network.to(cfg.device)
-
-    # Loss
+        # Loss
     loss = F.mse_loss
 
     checkpoints_dir = os.path.join(os.path.curdir, "checkpoints")
-    train_ignite(cfg.device, cfg.epochs, loss, optimizer, train_loader, train_eval_loader, val_loader, model.network, checkpoints_dir, cfg.amp_mode)
+    train_ignite(cfg.device, cfg.epochs, loss, optimizer, train_loader, train_eval_loader, val_loader, model.network, checkpoints_dir, cfg.amp_mode, cfg.scaler)
     logging.info("End training of train_model %s on %s for %s epochs", model.network, cfg.device, cfg.epochs)
 
     # Upload checkpoint folder containing model with best val score
@@ -182,11 +166,11 @@ def run_model(
     return model
 
 
-def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loader, val_loader, train_model, checkpoints_dir, amp_mode):
+def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loader, val_loader, train_model, checkpoints_dir, amp_mode, scaler):
     # Validator
     validation_evaluator = create_supervised_evaluator(train_model, metrics={"val_loss": Loss(loss), "neg_val_loss": Loss(loss)*-1}, device=device, amp_mode=amp_mode)
     # Trainer
-    trainer = create_supervised_trainer(train_model, optimizer, loss, device=device, amp_mode=amp_mode)
+    trainer = create_supervised_trainer(train_model, optimizer, loss, device=device, amp_mode=amp_mode, scaler=scaler)
     train_evaluator = create_supervised_evaluator(train_model, metrics={"loss": Loss(loss)}, device=device, amp_mode=amp_mode)
     run_id = binascii.hexlify(os.urandom(15)).decode("utf-8")
     artifacts_path = os.path.join(os.path.curdir, f"artifacts/{run_id}")
@@ -220,7 +204,7 @@ def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loade
 
     tb_logger = TensorboardLogger(log_dir=logs_path)
     #tb_logger.attach(trainer, log_handler=GradsScalarHandler(train_model), event_name=Events.ITERATION_COMPLETED(every=200))
-    tb_logger.attach(trainer, log_handler=WeightsScalarHandler(train_model), event_name=Events.ITERATION_COMPLETED(every=10))
+    tb_logger.attach(trainer, log_handler=WeightsScalarHandler(train_model), event_name=Events.ITERATION_COMPLETED(every=500))
     tb_logger.attach_output_handler(
         train_evaluator, event_name=Events.EPOCH_COMPLETED, tag="train", metric_names=["loss"], global_step_transform=global_step_from_engine(trainer)
     )
@@ -232,9 +216,9 @@ def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loade
         global_step_transform=global_step_from_engine(trainer),
     )
     to_save = {"train_model": train_model, "optimizer": optimizer}
-    checkpoint_handler = Checkpoint(to_save, DiskSaver(checkpoints_dir, create_dir=True, require_empty=False), n_saved=20)
-    #checkpoint_handler = save_best_model_by_val_score(checkpoints_dir, validation_evaluator, to_save,
-    #                                                  metric_name="neg_val_loss", n_saved=1, trainer=trainer)
+    #checkpoint_handler = Checkpoint(to_save, DiskSaver(checkpoints_dir, create_dir=True, require_empty=False), n_saved=20)
+    checkpoint_handler = save_best_model_by_val_score(checkpoints_dir, validation_evaluator, to_save,
+                                                      metric_name="neg_val_loss", n_saved=1, trainer=trainer)
     validation_evaluator.add_event_handler(Events.COMPLETED, checkpoint_handler)
     # Run Training
     logging.info("Start training of train_model %s on %s for %s epochs", train_model, device, epochs)
@@ -244,6 +228,7 @@ def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loade
     torch.autograd.set_detect_anomaly(True)
 
     trainer.run(train_loader, max_epochs=epochs)
+
     pbar.close()
 
 
@@ -266,7 +251,13 @@ def main(cfg: DictConfig):
         root_dir = cfg.model.dataset.root_dir
 
     model = instantiate(cfg.model, dataset={"root_dir":root_dir})
-    optimizer = optim.Adam(model.network.parameters(), lr = cfg.train.optimizer.lr)
+    if cfg.train.device is None:
+        logging.warning("device not set, torturing CPU.")
+        device = "cpu"
+        # TODO data parallelism and whitelist
+
+
+    optimizer = optim.Adam(model.network.parameters(), lr = cfg.train.optimizer.lr, eps=1e-4)
     logging.info("Model instantiated.")
 
     # competitions = args.competitions
@@ -281,8 +272,21 @@ def main(cfg: DictConfig):
         #load_torch_model_from_checkpoint(checkpoint=cfg.train.resume_checkpoint, model=model.network)
         to_load = {"train_model": model.network}
         checkpoint = torch.load(cfg.train.resume_checkpoint)
-        Checkpoint.load_objects(to_load, checkpoint)
+        #Checkpoint.load_objects(to_load, checkpoint, map_location=torch.device('cuda'))
+        model.network.load_state_dict(checkpoint['train_model'].module.state_dict())
+        # TODO
+        #optimizer.load_state_dict(checkpoint['optimizer'].state_dict())
 
+    if torch.cuda.is_available() and cfg.train.data_parallel:
+        # https://pytorch.org/tutorials/beginner/blitz/data_parallel_tutorial.html
+        if torch.cuda.device_count() > 1:
+            # https://stackoverflow.com/questions/59249563/runtimeerror-module-must-have-its-parameters-and-buffers-on-device-cuda1-devi
+            model.network = torch.nn.DataParallel(model.network, device_ids=cfg.train.device_ids)
+            logging.info(f"Let's use {len(model.network.device_ids)} GPUs: {model.network.device_ids}!")
+            device = f"cuda:{model.network.device_ids[0]}"
+
+
+    model.network = model.network.to(cfg.train.device)
 
     logging.info("Going to run train_model.")
     # logging.info(system_status())

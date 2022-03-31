@@ -2,7 +2,7 @@ random_seed: 123
 
 train_fraction: 1
 val_fraction: 0
-resume_checkpoint: null
+resume_checkpoint: '/home/shehel/waste/fault.pt'
 device: 'cpu'
 epochs: 3
 data_parallel: False
