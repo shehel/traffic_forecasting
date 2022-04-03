@@ -186,14 +186,15 @@ def main():
     task = Task.init(project_name="t4c_eval", task_name="Model Evaluation")
     logger = task.get_logger()
     args = {
-        'task_id': '8c6d6d71524b4ac59949668d0ce66d9e',
-        'batch_size': 1,
+        'task_id': 'f9355b0234354924a890e9d4b867a7cf',
+        'batch_size': 4,
         'num_workers': 0,
         'pixel': (108, 69),
         'loader': 'val',
         'num_channels': 4,
         'viz_dir': [0,1,2,3],
-        'viz_idx': 0
+        'viz_idx': 0,
+        'max_idx': 240
     }
 
     task.connect(args)
@@ -219,7 +220,7 @@ def main():
     network.load_state_dict(model_state_dict['train_model'])
     network.eval()
 
-    max_idx = 240
+    max_idx = args['max_idx']
     bs = args['batch_size']
     d = args['num_channels']
     #dataloader_config = configs[model_str].get("dataloader_config", {})
@@ -255,7 +256,7 @@ def main():
     print ('Wavelet Transform: {}'.format(is_waveTransform))
 
     #pixel_x, pixel_y = 101,132#108, 69
-    pixel_x, pixel_y = 108, 69
+    pixel_x, pixel_y = args['pixel']
     t = 0
 
 

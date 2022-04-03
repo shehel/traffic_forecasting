@@ -188,7 +188,7 @@ def main():
     logger = task.get_logger()
     args = {
         'task_id': '9be6fe52a8c44efe8052bfd4e24f2351',
-        'batch_size': 1,
+        'batch_size': 4,
         'num_workers': 0,
         'pixel': (108, 69),
         'loader': 'val',
@@ -212,8 +212,8 @@ def main():
         print("Could not find dataset in clearml server. Exiting!")
 
     model = instantiate(cfg.model, dataset={"root_dir":root_dir})
-    #model_path = train_task.artifacts['model_checkpoint'].get_local_copy()
-    model_path = "/data/best1dir.pt"
+    model_path = train_task.artifacts['model_checkpoint'].get_local_copy()
+    #model_path = "/data/best1dir.pt"
     network = model.network
     network = network.to('cuda')
     model_state_dict = torch.load(model_path)

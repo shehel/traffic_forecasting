@@ -39,11 +39,11 @@ class T4CDataset(Dataset):
         dim_step: int = 1,
         output_start: int = 0,
         output_step: int = 1,
-
-            reduced: bool = False,
-            factors_task_id: str = None,
-            single_channel: int = None,
-            time_step: int = None,
+        reduced: bool = False,
+        factors_task_id: str = None,
+        single_channel: int = None,
+        time_step: int = None,
+        perm: bool = False
     ):
         """torch dataset from training data.
         Parameters
@@ -78,6 +78,7 @@ class T4CDataset(Dataset):
         self.single_channel = single_channel
         self.time_step = time_step
         self.file_list = None
+        self.perm = False
         if self.reduced:
             preprocess_task = Task.get_task(task_id=factors_task_id)
             with open(preprocess_task.artifacts['trainset factors'].get_local_copy(), 'rb') as file:
@@ -114,8 +115,9 @@ class T4CDataset(Dataset):
         two_hours = self.files[file_idx][start_hour:start_hour + 12 * 2 + 1]
         two_hours = two_hours[:,::self.sampling_height,::self.sampling_width,self.dim_start::self.dim_step]
 
-        #dir_sel = random.randint(0,3)
-        #two_hours = two_hours[:,:,:,perm[dir_sel]]
+        if self.perm:
+            dir_sel = random.randint(0,3)
+            two_hours = two_hours[:,:,:,perm[dir_sel]]
         input_data, output_data = prepare_test(two_hours)
 
 

@@ -257,7 +257,7 @@ def main(cfg: DictConfig):
         # TODO data parallelism and whitelist
 
 
-    optimizer = optim.Adam(model.network.parameters(), lr = cfg.train.optimizer.lr, eps=1e-4)
+    optimizer = optim.Adam(model.network.parameters(), lr = cfg.train.optimizer.lr)
     logging.info("Model instantiated.")
 
     # competitions = args.competitions

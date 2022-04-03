@@ -23,8 +23,9 @@ dataset:
   output_start: 0
   output_step: 1
   reduced: False
-  single_channel: 2
-  time_step: 0
+  single_channel: 0
+  time_step:
+  perm: True
 
   # TODO detach transform and have it separate?
   transform:
