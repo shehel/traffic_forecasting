@@ -185,7 +185,7 @@ def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loade
         # logging.info(system_status()
 
     @trainer.on(Events.EPOCH_COMPLETED)  # noqa
-    #@trainer.on(Events.STARTED)  # noqa
+    @trainer.on(Events.STARTED)  # noqa
     def log_epoch_summary(engine: Engine):
         # Training
         train_evaluator.run(train_eval_loader)

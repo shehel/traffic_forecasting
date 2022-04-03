@@ -88,7 +88,7 @@ class T4CDataset(Dataset):
     def _load_dataset(self):
 
         self.file_list = list(Path(self.root_dir).rglob(self.file_filter))
-        self.file_list.sort()
+        #self.file_list.sort()
         for file in self.file_list:
             self.files.append(load_h5_file(file))
         self.len = len(self.files) * MAX_TEST_SLOT_INDEX
