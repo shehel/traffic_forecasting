@@ -186,15 +186,17 @@ def main():
     task = Task.init(project_name="t4c_eval", task_name="Model Evaluation")
     logger = task.get_logger()
     args = {
-        'task_id': 'f9355b0234354924a890e9d4b867a7cf',
+        'task_id': '49aaad7a3d1f4869997c945c2fd93beb',
         'batch_size': 4,
         'num_workers': 0,
         'pixel': (108, 69),
         'loader': 'val',
-        'num_channels': 4,
-        'viz_dir': [0,1,2,3],
+        'num_channels': 1,
+        'viz_dir': [0],
         'viz_idx': 0,
+        'time_step': 0,
         'max_idx': 240
+
     }
 
     task.connect(args)
@@ -257,7 +259,7 @@ def main():
 
     #pixel_x, pixel_y = 101,132#108, 69
     pixel_x, pixel_y = args['pixel']
-    t = 0
+    t = args['time_step']
 
 
     for idx, i in (enumerate(loader)):
@@ -297,9 +299,9 @@ def main():
             p_true = (true[:,t, pixel_x, pixel_y, :].numpy())
             trues[idx*bs:idx*bs+bs] = p_true
             preds[idx*bs:idx*bs+bs] = p_pred
-
-        if idx==args['viz_idx']:
-            plot_tmaps(true[0].numpy(), pred[0].numpy(), args['viz_dir'], logger)
+        if len(args['viz_dir']) != 0:
+            if idx==args['viz_idx']:
+                plot_tmaps(true[0].numpy(), pred[0].numpy(), args['viz_dir'], logger)
         #msenz.append(mse_func(pred.flatten(), true.flatten(), nonzero))
         #trues.extend(p_true)
         #preds.extend(p_pred)

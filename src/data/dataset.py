@@ -78,7 +78,7 @@ class T4CDataset(Dataset):
         self.single_channel = single_channel
         self.time_step = time_step
         self.file_list = None
-        self.perm = False
+        self.perm = perm
         if self.reduced:
             preprocess_task = Task.get_task(task_id=factors_task_id)
             with open(preprocess_task.artifacts['trainset factors'].get_local_copy(), 'rb') as file:
@@ -88,7 +88,7 @@ class T4CDataset(Dataset):
     def _load_dataset(self):
 
         self.file_list = list(Path(self.root_dir).rglob(self.file_filter))
-        #self.file_list.sort()
+        self.file_list.sort()
         for file in self.file_list:
             self.files.append(load_h5_file(file))
         self.len = len(self.files) * MAX_TEST_SLOT_INDEX
@@ -100,9 +100,11 @@ class T4CDataset(Dataset):
             return load_h5_file(fn, sl=sl)
 
     def __len__(self):
-        #if self.limit is not None:
-        #    return min(size_240_slots_a_day, self.limit)
-        return self.len
+        if self.limit is not None:
+            return min(self.len, self.limit)
+        else:
+            return self.len
+
 
     def __getitem__(self, idx: int) -> Tuple[Any, Any]:
         if idx > self.__len__():

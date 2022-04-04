@@ -21,7 +21,7 @@ dataset:
   dim_start: 0
   dim_step: 1
   output_start: 0
-  output_step: 1
+  output_step: 2
   reduced: False
   single_channel: 0
   time_step:
