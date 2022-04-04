@@ -44,11 +44,11 @@ from hydra.utils import instantiate
 from omegaconf import OmegaConf
 
 from clearml import Dataset, Task
-perm = [[0,1,2,3,4,5,6,7],
+perm = np.array([[0,1,2,3,4,5,6,7],
         [2,3,4,5,6,7,0,1],
         [4,5,6,7,0,1,2,3],
         [6,7,0,1,2,3,4,5]
-        ]
+        ])
 
 def reset_seeds(seed):
     random.seed(seed)
@@ -183,18 +183,18 @@ Information include
 """
 def main():
     reset_seeds(123)
-    task = Task.init(project_name="t4c_eval", task_name="Model Evaluation")
+    task = Task.init(project_name="t4c_eval", task_name="Chx tsx 7days")
     logger = task.get_logger()
     args = {
-        'task_id': '49aaad7a3d1f4869997c945c2fd93beb',
+        'task_id': '5a1611b125ad4859bebbbe79d6bb9749',
         'batch_size': 4,
         'num_workers': 0,
         'pixel': (108, 69),
         'loader': 'val',
-        'num_channels': 1,
-        'viz_dir': [0],
+        'num_channels': 4,
+        'viz_dir': [0, 1, 2, 3],
         'viz_idx': 0,
-        'time_step': 0,
+        'time_step': 0, #time step to plot
         'max_idx': 240
 
     }
@@ -212,13 +212,18 @@ def main():
         root_dir = Dataset.get(dataset_project="t4c", dataset_name=cfg.model.dataset.root_dir).get_local_copy()
     except:
         print("Could not find dataset in clearml server. Exiting!")
-
+    
+    if cfg.model.dataset.perm == True:
+        is_perm = True
+        cfg.model.dataset.perm = False
+        cfg.model.dataset.single_channel = None
     model = instantiate(cfg.model, dataset={"root_dir":root_dir})
-    model_path = train_task.artifacts['model_checkpoint'].get_local_copy()
+    #model_path = train_task.artifacts['model_checkpoint'].get_local_copy()
     network = model.network
     network = network.to('cuda')
-    #model_state_dict = torch.load(model_path)
-    model_state_dict = torch.load(model_path+'/'+os.listdir(model_path)[0])#,map_location=torch.device('cpu'))
+    model_path = "/data/t5chx.pt"
+    model_state_dict = torch.load(model_path)
+    #model_state_dict = torch.load(model_path+'/'+os.listdir(model_path)[0])#,map_location=torch.device('cpu'))
     network.load_state_dict(model_state_dict['train_model'])
     network.eval()
 
@@ -262,55 +267,127 @@ def main():
     t = args['time_step']
 
 
-    for idx, i in (enumerate(loader)):
-        batch_prediction = network(i[0].to('cuda'))
-        batch_prediction = batch_prediction.cpu().detach()#.numpy()
+    if is_perm == False:
+        for idx, i in (enumerate(loader)):
+            batch_prediction = network(i[0].to('cuda'))
+            batch_prediction = batch_prediction.cpu().detach()#.numpy()
 
-        pred = model.t_dataset.transform.post_transform(batch_prediction)
-        true = model.t_dataset.transform.post_transform(i[1])
+            pred = model.t_dataset.transform.post_transform(batch_prediction)
+            true = model.t_dataset.transform.post_transform(i[1])
 
-        # pred1 = pred[:,:,:,:,::2]
-        # true1 = true[:,:,:,:,::2]
-        # pred2 = pred[:,:,:,:,1::2]
-        # true2 = true[:,:,:,:,1::2]
-        if is_waveTransform:
-            _,_,rh,rw = pred.shape
-            Yl = pred[:, :24,:,:]
-            Yh = [pred[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
-            #Yh[0][:,:,:,:,:] = 0
-            pred = ifm((Yl, Yh))
-
-            Yl = true[:, :24,:,:]
-            Yh = [true[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
-            true = ifm((Yl, Yh))
-
-        mse.append(mean_squared_error(pred.flatten(), true.flatten()))
-        # mse1.append(mean_squared_error(pred1.flatten(), true1.flatten()))
-        # mse2.append(mean_squared_error(pred2.flatten(), true2.flatten()))
-
-        if idx>=max_idx/bs:
-            continue
-        else:
+            # pred1 = pred[:,0,:,:,0]
+            # true1 = true[:,0,:,:,0]
+            # pred2 = pred[:,5,:,:,0]
+            # true2 = true[:,5,:,:,0]
             if is_waveTransform:
-                true = unstack_on_time(true[:,:,:-1,:], d)
-                pred = unstack_on_time(pred[:,:,:-1,:], d)
+                _,_,rh,rw = pred.shape
+                Yl = pred[:, :24,:,:]
+                Yh = [pred[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
+                #Yh[0][:,:,:,:,:] = 0
+                pred = ifm((Yl, Yh))
 
-            p_pred = (pred[:,t, pixel_x, pixel_y, :].numpy())
-            p_true = (true[:,t, pixel_x, pixel_y, :].numpy())
-            trues[idx*bs:idx*bs+bs] = p_true
-            preds[idx*bs:idx*bs+bs] = p_pred
-        if len(args['viz_dir']) != 0:
-            if idx==args['viz_idx']:
-                plot_tmaps(true[0].numpy(), pred[0].numpy(), args['viz_dir'], logger)
-        #msenz.append(mse_func(pred.flatten(), true.flatten(), nonzero))
-        #trues.extend(p_true)
-        #preds.extend(p_pred)
-        #if idx==240:
-        #break
+                Yl = true[:, :24,:,:]
+                Yh = [true[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
+                true = ifm((Yl, Yh))
+
+            mse.append(mean_squared_error(pred.flatten(), true.flatten()))
+            #mse1.append(mean_squared_error(pred1.flatten(), true1.flatten()))
+            #mse2.append(mean_squared_error(pred2.flatten(), true2.flatten()))
+
+            if idx>=max_idx/bs:
+                continue
+            else:
+                if is_waveTransform:
+                    true = unstack_on_time(true[:,:,:-1,:], d)
+                    pred = unstack_on_time(pred[:,:,:-1,:], d)
+
+                p_pred = (pred[:,t, pixel_x, pixel_y, :].numpy())
+                p_true = (true[:,t, pixel_x, pixel_y, :].numpy())
+                trues[idx*bs:idx*bs+bs] = p_true
+                preds[idx*bs:idx*bs+bs] = p_pred
+            if len(args['viz_dir']) != 0:
+                if idx==args['viz_idx']:
+                    plot_tmaps(true[0].numpy(), pred[0].numpy(), args['viz_dir'], logger)
+            #msenz.append(mse_func(pred.flatten(), true.flatten(), nonzero))
+            #trues.extend(p_true)
+            #preds.extend(p_pred)
+            #if idx==240:
+            #break
+    else:
+        try:
+            time_steps = cfg.model.data.set.time_step
+        except:
+            print("Using default timesteps 6")
+            time_steps = 6
+        pred_comb = np.zeros((bs, time_steps, 495, 436, d))
+        true_comb = np.zeros((bs, time_steps, 495, 436, d))
+        for idx, i in (enumerate(loader)):
+            for directions in range(4):
+                switch = perm[directions]
+                for c in range(1,12): switch = np.vstack([switch, perm[directions]+(8*c)])
+                inp = i[0][:,switch.flatten(),:,:]
+                outp = i[1][:,directions::4,:,:] 
+                batch_prediction = network(inp.to('cuda'))
+                batch_prediction = batch_prediction.cpu().detach()#.numpy()
+
+                pred = model.t_dataset.transform.post_transform(batch_prediction)
+                true = model.t_dataset.transform.post_transform(outp)
+                pred_comb[:, :, :, :,directions:directions+1] = pred.numpy()
+                true_comb[:, :, :, :,directions:directions+1] = true.numpy()
+
+
+                if is_waveTransform:
+                    _,_,rh,rw = pred.shape
+                    Yl = pred[:, :24,:,:]
+                    Yh = [pred[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
+                    #Yh[0][:,:,:,:,:] = 0
+                    pred = ifm((Yl, Yh))
+
+                    Yl = true[:, :24,:,:]
+                    Yh = [true[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
+                    true = ifm((Yl, Yh))
+
+            try:
+                pred1 = pred_comb[:,0,:,:,1]
+                true1 = true_comb[:,0,:,:,1]
+                #pred2 = pred_comb[:,5,:,:,1]
+                #true2 = true_comb[:,5,:,:,1]
+
+                mse.append(mean_squared_error(pred_comb.flatten(), true_comb.flatten()))
+                mse1.append(mean_squared_error(pred1.flatten(), true1.flatten()))
+                #mse2.append(mean_squared_error(pred2.flatten(), true2.flatten()))
+                print (mse)
+
+            except:
+                print ("Failed in mse calc!")
+
+            if idx == args['viz_idx']:
+                plot_tmaps(true_comb[0], pred_comb[0], args['viz_dir'], logger)
+            # mse1.append(mean_squared_error(pred1.flatten(), true1.flatten()))
+            # mse2.append(mean_squared_error(pred2.flatten(), true2.flatten()))
+
+            if idx>=max_idx/bs:
+                continue
+            else:
+            #     if is_waveTransform:
+            #         true = unstack_on_time(true[:,:,:-1,:], d)
+            #         pred = unstack_on_time(pred[:,:,:-1,:], d)
+
+                 p_pred = (pred_comb[:,t, pixel_x, pixel_y, :])
+                 p_true = (true_comb[:,t, pixel_x, pixel_y, :])
+                 trues[idx*bs:idx*bs+bs] = p_true
+                 preds[idx*bs:idx*bs+bs] = p_pred
+
+            #msenz.append(mse_func(pred.flatten(), true.flatten(), nonzero))
+            #trues.extend(p_true)
+            #preds.extend(p_pred)
+            #if idx==240:
+            #break
+
     print (mse)
     print("Overall MSE: {}".format(sum(mse)/len(mse)))
-    # print("MSE vol: {}".format(sum(mse1)/len(mse1)))
-    # print("MSE speed: {}".format(sum(mse2)/len(mse2)))
+    print("MSE ts 0 ch2/8: {}".format(sum(mse1)/len(mse1)))
+    #print("MSE ts 5 ch2/8: {}".format(sum(mse2)/len(mse2)))
     plot_dims(logger, trues, preds, d)
 if __name__ == "__main__":
     main()
