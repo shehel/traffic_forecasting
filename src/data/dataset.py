@@ -30,6 +30,7 @@ class T4CDataset(Dataset):
         self,
         root_dir: str,
         file_filter: str = None,
+            static_filter: str = None,
         limit: Optional[int] = None,
         transform: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
         use_npy: bool = False,
@@ -60,12 +61,16 @@ class T4CDataset(Dataset):
         self.root_dir = root_dir
         self.limit = limit
         self.files = []
+        self.static_dict = {}
         self.file_filter = file_filter
+        self.static_filter = static_filter
         self.use_npy = use_npy
         if self.file_filter is None:
             self.file_filter = "**/training/*8ch.h5"
             if self.use_npy:
                 self.file_filter = "**/training_npy/*.npy"
+        if self.static_filter is None:
+            self.static_filter = "**/*_static.h5"
         self.transform = transform
         self.len = 0
         self.sampling_height = sampling_height
@@ -88,6 +93,10 @@ class T4CDataset(Dataset):
     def _load_dataset(self):
 
         self.file_list = list(Path(self.root_dir).rglob(self.file_filter))
+        static_list = list(Path(self.root_dir).rglob(self.static_filter))
+
+        for city in static_list:
+            self.static_dict[city.parts[-2]] = load_h5_file(city)
         self.file_list.sort()
         for file in self.file_list:
             self.files.append(load_h5_file(file))
@@ -113,6 +122,7 @@ class T4CDataset(Dataset):
         file_idx = idx // MAX_TEST_SLOT_INDEX
         start_hour = idx % MAX_TEST_SLOT_INDEX
 
+
         #two_hours = self._load_h5_file(self.files[file_idx], sl=slice(start_hour, start_hour + 12 * 2 + 1))
         two_hours = self.files[file_idx][start_hour:start_hour + 12 * 2 + 1]
         two_hours = two_hours[:,::self.sampling_height,::self.sampling_width,self.dim_start::self.dim_step]
@@ -122,7 +132,9 @@ class T4CDataset(Dataset):
             two_hours = two_hours[:,:,:,perm[dir_sel]]
         input_data, output_data = prepare_test(two_hours)
 
-
+        # get static channels
+        static_ch = self.static_dict[self.files[file_idx].parts[-3]]
+        pdb.set_trace()
         input_data = self._to_torch(input_data)
         output_data = self._to_torch(output_data)
 
