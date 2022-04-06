@@ -36,8 +36,6 @@ from src.common.h5_util import load_h5_file
 from src.common.h5_util import write_data_to_h5
 from src.common.utils import t4c_apply_basic_logging_config
 from src.common.monitoring import disk_usage_human_readable
-
-
 def prepare_test(data: np.ndarray, offset=0, to_torch: bool = False) -> Tuple[Union[np.ndarray, torch.Tensor], Union[np.ndarray, torch.Tensor]]:
     """Extracts an hour of test data for one hour and ground truth prediction
     5,10,15,30,45 and 60 minutes into the future.

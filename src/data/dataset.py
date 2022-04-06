@@ -123,19 +123,18 @@ class T4CDataset(Dataset):
 
 
         #two_hours = self._load_h5_file(self.files[file_idx], sl=slice(start_hour, start_hour + 12 * 2 + 1))
-        two_hours = self.files[file_idx][start_hour:start_hour + 12 * 2 + 1]
+        two_hours = self.files[file_idx][start_hour:start_hour+24]
+
         two_hours = two_hours[:,::self.sampling_height,::self.sampling_width,self.dim_start::self.dim_step]
 
         if self.perm:
             dir_sel = random.randint(0,3)
             two_hours = two_hours[:,:,:,perm[dir_sel]]
-        input_data, output_data = prepare_test(two_hours)
+        #input_data, output_data = prepare_test(two_hours)
+        dynamic_input, output_data = two_hours[:12], two_hours[[12, 13, 14, 17, 20, 23]]
 
         # get static channels
         static_ch = self.static_dict[self.file_list[file_idx].parts[-3]]
-        input_data = self._to_torch(input_data)
-        output_data = self._to_torch(output_data)
-        static_ch = self._to_torch(static_ch)
 
         output_data = output_data[:,:,:,self.output_start::self.output_step]
 
@@ -145,19 +144,31 @@ class T4CDataset(Dataset):
         if self.time_step is not None:
             output_data = output_data[self.time_step:self.time_step+1,:,:,:]
 
-        if self.transform is not None:
-            input_data = self.transform.pre_transform(input_data)
-            output_data = self.transform.pre_transform(output_data)
-            static_ch = self.transform.pre_transform(static_ch, stack_time=False)
+        # if self.transform is not None:
+        #     dynamic_input = self.transform.pre_transform(dynamic_input)
+        #     output_data = self.transform.pre_transform(output_data)
+            # static_ch = self.transform.pre_transform(static_ch, stack_time=False)
         #input_data = torch.cat((input_data, static_ch), dim=0)
         if self.reduced:
-            input_data = input_data.numpy()
-            reduc = tl.tenalg.multi_mode_dot(input_data, self.factors, transpose=True)
-            input_data = torch.from_numpy(reduc).float()
+            dynamic_input = dynamic_input.numpy()
+            reduc = tl.tenalg.multi_mode_dot(dynamic_input, self.factors, transpose=True)
+            dynamic_input = torch.from_numpy(reduc).float()
 
-        return input_data, output_data
+        return dynamic_input, static_ch, output_data
 
     def _to_torch(self, data):
         data = torch.from_numpy(data)
         data = data.to(dtype=torch.float)
         return data
+def train_collate_fn(batch):
+    dynamic_input_batch, static_input_batch, target_batch = zip(*batch)
+    dynamic_input_batch = np.stack(dynamic_input_batch, axis=0)
+    static_input_batch = np.stack(static_input_batch, axis=0)
+    target_batch = np.stack(target_batch, axis=0)
+    dynamic_input_batch = np.moveaxis(dynamic_input_batch, source=4, destination=2)
+    dynamic_input_batch = torch.from_numpy(dynamic_input_batch).float()
+    static_input_batch = torch.from_numpy(static_input_batch)
+    target_batch = np.moveaxis(target_batch, source=4, destination=2)
+    target_batch = torch.from_numpy(target_batch).float()
+    pdb.set_trace()
+    return dynamic_input_batch, static_input_batch, target_batch

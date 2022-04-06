@@ -45,7 +45,7 @@ from torch.utils.data import SubsetRandomSampler
 
 from src.models.checkpointing import load_torch_model_from_checkpoint
 from src.models.checkpointing import save_torch_model_to_checkpoint
-from src.data.dataset import T4CDataset
+from src.data.dataset import T4CDataset, train_collate_fn
 
 import pdb
 
@@ -71,7 +71,7 @@ def reset_seeds(seed):
 
 
 def run_model(
-    task: str,
+    task: Task,
     model: Model,
     optimizer: optim,
     cfg: DictConfig,
@@ -133,7 +133,7 @@ def run_model(
     dev_sampler = SubsetRandomSampler(dev_indices)
 
     train_loader = DataLoader(model.t_dataset, batch_size=cfg.dataloader.batch_size, num_workers=cfg.dataloader.num_workers,
-                              sampler=train_sampler)
+                              sampler=train_sampler, collate_fn = train_collate_fn, pin_memory=True, drop_last= True)
 
     # Needed as train evaluator uses the entire training set for
     # train loss which is prohibitively long. If the number of samplers
@@ -142,16 +142,19 @@ def run_model(
     if cfg.dataloader.train_eval and cfg.dataloader.train_eval < num_train_items:
         train_eval_sampler = SubsetRandomSampler(indices[:cfg.dataloader.train_eval])
         train_eval_loader = DataLoader(model.t_dataset, batch_size=cfg.dataloader.batch_size, num_workers=cfg.dataloader.num_workers,
-                              sampler=train_eval_sampler)
+                                       sampler=train_eval_sampler,
+                                       collate_fn = train_collate_fn, pin_memory=True)
     else:
         train_eval_loader = train_loader
 
     if valset:
         val_loader = DataLoader(model.v_dataset, batch_size=cfg.dataloader.batch_size,
-                            num_workers=cfg.dataloader.num_workers, sampler=dev_sampler)
+                                num_workers=cfg.dataloader.num_workers, sampler=dev_sampler,
+                                collate_fn = train_collate_fn, pin_memory=True)
     else:
         val_loader = DataLoader(model.t_dataset, batch_size=cfg.dataloader.batch_size,
-                            num_workers=cfg.dataloader.num_workers, sampler=dev_sampler)
+                                num_workers=cfg.dataloader.num_workers, sampler=dev_sampler,
+                                collate_fn = train_collate_fn, pin_memory=True)
 
         # Loss
     loss = F.mse_loss
@@ -164,6 +167,27 @@ def run_model(
     task.upload_artifact(name='model_checkpoint', artifact_object=checkpoints_dir)
 
     return model
+
+def prepare_batch_fn(batch, device, non_blocking):
+    dynamic, static, target  = batch
+
+    # return a tuple of (x, y) that can be directly runned as
+    # `loss_fn(model(x), y)`
+
+    dynamic = convert_tensor(dynamic, device, non_blocking)
+    static = convert_tensor(static, device, non_blocking)
+    static = convert_tensor(target, device, non_blocking)
+    dynamic = dynamic.reshape(-1, 96, 495, 436)
+    dynamic = F.pad(dynamic, pad=(6, 6, 1, 0))
+    target = target.reshape(-1, 48, 495, 436)
+    static = F.pad(static, pad=(6, 6, 1, 0))
+    input_batch = torch.cat([dynamic, static], dim=1)
+
+    return input_batch, target
+def output_transform_fn(x, y, y_pred, loss):
+    # return only the loss is actually the default behavior for
+    # trainer engine, but you can return anything you want
+    return loss.item()
 
 
 def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loader, val_loader, train_model, checkpoints_dir, amp_mode, scaler):
@@ -237,8 +261,7 @@ def main(cfg: DictConfig):
 
     reset_seeds(cfg.train.random_seed)
     #sd = Dataset.get(dataset_project="t4c", dataset_name="default").get_mutable_local_copy("data/raw")
-    #task = Task.init(project_name='t4c', task_name='train_model')
-    task = "sample"
+    task = Task.init(project_name='t4c', task_name='train_model')
     t4c_apply_basic_logging_config()
 
     # Uses cfg.name to fetch clearml dataset which is used to instantiate
@@ -246,8 +269,7 @@ def main(cfg: DictConfig):
 
     # TODO case when validation data comes from a different set
     try:
-        #root_dir = Dataset.get(dataset_project="t4c", dataset_name=cfg.model.dataset.root_dir).get_local_copy()
-        print (bla)
+        root_dir = Dataset.get(dataset_project="t4c", dataset_name=cfg.model.dataset.root_dir).get_local_copy()
     except:
         root_dir = cfg.model.dataset.root_dir
         logging.info(f"Could not find dataset in clearml server. Using {root_dir} as path.")
