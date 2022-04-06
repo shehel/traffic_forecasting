@@ -71,7 +71,7 @@ def reset_seeds(seed):
 
 
 def run_model(
-    task: Task,
+    task: str,
     model: Model,
     optimizer: optim,
     cfg: DictConfig,
@@ -237,7 +237,8 @@ def main(cfg: DictConfig):
 
     reset_seeds(cfg.train.random_seed)
     #sd = Dataset.get(dataset_project="t4c", dataset_name="default").get_mutable_local_copy("data/raw")
-    task = Task.init(project_name='t4c', task_name='train_model')
+    #task = Task.init(project_name='t4c', task_name='train_model')
+    task = "sample"
     t4c_apply_basic_logging_config()
 
     # Uses cfg.name to fetch clearml dataset which is used to instantiate
@@ -245,10 +246,11 @@ def main(cfg: DictConfig):
 
     # TODO case when validation data comes from a different set
     try:
-        root_dir = Dataset.get(dataset_project="t4c", dataset_name=cfg.model.dataset.root_dir).get_local_copy()
+        #root_dir = Dataset.get(dataset_project="t4c", dataset_name=cfg.model.dataset.root_dir).get_local_copy()
+        print (bla)
     except:
-        logging.info("Could not find dataset in clearml server. Using root_dir as path.")
         root_dir = cfg.model.dataset.root_dir
+        logging.info(f"Could not find dataset in clearml server. Using {root_dir} as path.")
 
     model = instantiate(cfg.model, dataset={"root_dir":root_dir})
     if cfg.train.device is None:

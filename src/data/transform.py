@@ -18,11 +18,10 @@ class UNetTransform(DataTransform):
         crop_pad: _dim: Tuple of pixels to crop/pad in each side
     """
 
-    def __init__(self, stack_time: bool = False, pre_batch_dim: bool = False,
+    def __init__(self, pre_batch_dim: bool = False,
                  post_batch_dim: bool = True,
                  num_channels: int = 8,
                  crop_pad: Optional[Tuple[int, int, int, int]] = None) -> None:
-        self.stack_time = stack_time
         self.pre_batch_dim = pre_batch_dim
         self.post_batch_dim = post_batch_dim
         self.crop_pad = crop_pad
@@ -31,6 +30,7 @@ class UNetTransform(DataTransform):
         self,
         data: np.ndarray,
         from_numpy: bool = False,
+            stack_time: bool = True,
         **kwargs
     ) -> torch.Tensor:
         """Transform data from `T4CDataset` be used by UNet:
@@ -43,7 +43,7 @@ class UNetTransform(DataTransform):
         if not self.pre_batch_dim:
             data = torch.unsqueeze(data, 0)
 
-        if self.stack_time:
+        if stack_time:
             data = self.stack_on_time(data, batch_dim=True)
 
         if self.crop_pad is not None:
@@ -55,7 +55,7 @@ class UNetTransform(DataTransform):
         return data
 
     def post_transform(
-            self, data: torch.Tensor, **kwargs
+            self, data: torch.Tensor, stack_time: bool = True,  **kwargs
     ) -> torch.Tensor:
         """Bring data from UNet back to `T4CDataset` format:
 
@@ -71,8 +71,8 @@ class UNetTransform(DataTransform):
             right = width - right
             bottom = height - bottom
             data = data[:, :, top:bottom, left:right]
-        if self.stack_time:
-             data = self.unstack_on_time(data, batch_dim=True)
+        if stack_time:
+            data = self.unstack_on_time(data, batch_dim=True)
         if not self.post_batch_dim:
             data = torch.squeeze(data, 0)
         return data

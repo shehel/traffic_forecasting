@@ -91,7 +91,6 @@ class T4CDataset(Dataset):
 
 
     def _load_dataset(self):
-
         self.file_list = list(Path(self.root_dir).rglob(self.file_filter))
         static_list = list(Path(self.root_dir).rglob(self.static_filter))
 
@@ -133,10 +132,10 @@ class T4CDataset(Dataset):
         input_data, output_data = prepare_test(two_hours)
 
         # get static channels
-        static_ch = self.static_dict[self.files[file_idx].parts[-3]]
-        pdb.set_trace()
+        static_ch = self.static_dict[self.file_list[file_idx].parts[-3]]
         input_data = self._to_torch(input_data)
         output_data = self._to_torch(output_data)
+        static_ch = self._to_torch(static_ch)
 
         output_data = output_data[:,:,:,self.output_start::self.output_step]
 
@@ -149,6 +148,8 @@ class T4CDataset(Dataset):
         if self.transform is not None:
             input_data = self.transform.pre_transform(input_data)
             output_data = self.transform.pre_transform(output_data)
+            static_ch = self.transform.pre_transform(static_ch, stack_time=False)
+        #input_data = torch.cat((input_data, static_ch), dim=0)
         if self.reduced:
             input_data = input_data.numpy()
             reduc = tl.tenalg.multi_mode_dot(input_data, self.factors, transpose=True)
