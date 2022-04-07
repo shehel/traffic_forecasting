@@ -61,6 +61,8 @@ from src.common.utils import t4c_apply_basic_logging_config
 from clearml import Task
 from clearml import Dataset
 
+import ignite.distributed as idist
+
 def reset_seeds(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -133,8 +135,11 @@ def run_model(
     train_sampler = SubsetRandomSampler(train_indices)
     dev_sampler = SubsetRandomSampler(dev_indices)
 
-    train_loader = DataLoader(model.t_dataset, batch_size=cfg.dataloader.batch_size, num_workers=cfg.dataloader.num_workers,
-                              sampler=train_sampler, collate_fn = train_collate_fn, pin_memory=True, drop_last= True)
+    #train_loader = DataLoader(model.t_dataset, batch_size=cfg.dataloader.batch_size, num_workers=cfg.dataloader.num_workers,
+    #                          sampler=train_sampler)
+    train_loader = idist.auto_dataloader(model.t_dataset, batch_size=cfg.dataloader.batch_size, num_workers=cfg.dataloader.num_workers,
+                              sampler=train_sampler, collate_fn=train_collate_fn, pin_memory=True, drop_last=True)
+
 
     # Needed as train evaluator uses the entire training set for
     # train loss which is prohibitively long. If the number of samplers
@@ -142,20 +147,17 @@ def run_model(
     # training set, default to train loader for loss calculation
     if cfg.dataloader.train_eval and cfg.dataloader.train_eval < num_train_items:
         train_eval_sampler = SubsetRandomSampler(indices[:cfg.dataloader.train_eval])
-        train_eval_loader = DataLoader(model.t_dataset, batch_size=cfg.dataloader.batch_size, num_workers=cfg.dataloader.num_workers,
-                                       sampler=train_eval_sampler,
-                                       collate_fn = train_collate_fn, pin_memory=True)
+        train_eval_loader = idist.auto_dataloader(model.t_dataset, batch_size=cfg.dataloader.batch_size, num_workers=cfg.dataloader.num_workers,
+                              sampler=train_eval_sampler, collate_fn=train_collate_fn, pin_memory=True, drop_last=True)
     else:
         train_eval_loader = train_loader
 
     if valset:
-        val_loader = DataLoader(model.v_dataset, batch_size=cfg.dataloader.batch_size,
-                                num_workers=cfg.dataloader.num_workers, sampler=dev_sampler,
-                                collate_fn = train_collate_fn, pin_memory=True)
+        val_loader = idist.auto_dataloader(model.v_dataset, batch_size=cfg.dataloader.batch_size,
+                            num_workers=cfg.dataloader.num_workers, sampler=dev_sampler, collate_fn=train_collate_fn, pin_memory=True)
     else:
-        val_loader = DataLoader(model.t_dataset, batch_size=cfg.dataloader.batch_size,
-                                num_workers=cfg.dataloader.num_workers, sampler=dev_sampler,
-                                collate_fn = train_collate_fn, pin_memory=True)
+        val_loader = idist.auto_dataloader(model.t_dataset, batch_size=cfg.dataloader.batch_size,
+                            num_workers=cfg.dataloader.num_workers, sampler=dev_sampler, collate_fn =train_collate_fn, pin_memory=True)
 
         # Loss
     loss = F.mse_loss
@@ -186,14 +188,10 @@ def prepare_batch_fn(batch, device, non_blocking):
     input_batch = torch.cat([dynamic, static], dim=1)
 
     return input_batch, target
-def output_transform_fn(x, y, y_pred, loss):
-    # return only the loss is actually the default behavior for
-    # trainer engine, but you can return anything you want
-    return loss.item()
-
 
 def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loader, val_loader, train_model, checkpoints_dir, amp_mode, scaler):
     # Validator
+
     validation_evaluator = create_supervised_evaluator(train_model, metrics={"val_loss": Loss(loss), "neg_val_loss": Loss(loss)*-1}, device=device, amp_mode=amp_mode,
                                                        prepare_batch=prepare_batch_fn)
     # Trainer
@@ -214,7 +212,6 @@ def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loade
         # logging.info(system_status()
 
     @trainer.on(Events.EPOCH_COMPLETED)  # noqa
-    @trainer.on(Events.STARTED)  # noqa
     def log_epoch_summary(engine: Engine):
         # Training
         train_evaluator.run(train_eval_loader)
@@ -233,9 +230,9 @@ def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loade
 
     tb_logger = TensorboardLogger(log_dir=logs_path)
     #tb_logger.attach(trainer, log_handler=GradsScalarHandler(train_model), event_name=Events.ITERATION_COMPLETED(every=200))
-    tb_logger.attach(trainer, log_handler=WeightsScalarHandler(train_model), event_name=Events.ITERATION_COMPLETED(every=500))
+    #tb_logger.attach(trainer, log_handler=WeightsScalarHandler(train_model), event_name=Events.ITERATION_COMPLETED(every=500))
     tb_logger.attach_output_handler(
-        train_evaluator, event_name=Events.EPOCH_COMPLETED, tag="train", metric_names=["loss"], global_step_transform=global_step_from_engine(trainer)
+       train_evaluator, event_name=Events.EPOCH_COMPLETED, tag="train", metric_names=["loss"], global_step_transform=global_step_from_engine(trainer)
     )
     tb_logger.attach_output_handler(
         validation_evaluator,
@@ -243,9 +240,9 @@ def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loade
         tag="validation",
         metric_names=["val_loss"],
         global_step_transform=global_step_from_engine(trainer),
-    )
+    #)
     to_save = {"train_model": train_model, "optimizer": optimizer}
-    #checkpoint_handler = Checkpoint(to_save, DiskSaver(checkpoints_dir, create_dir=True, require_empty=False), n_saved=20)
+    checkpoint_handler = Checkpoint(to_save, DiskSaver(checkpoints_dir, create_dir=True, require_empty=False), n_saved=20)
     checkpoint_handler = save_best_model_by_val_score(checkpoints_dir, validation_evaluator, to_save,
                                                       metric_name="neg_val_loss", n_saved=1, trainer=trainer)
     validation_evaluator.add_event_handler(Events.COMPLETED, checkpoint_handler)
@@ -254,24 +251,18 @@ def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loade
     logging.info(f"tensorboard --logdir={artifacts_path}")
 
     # To get better trace of Nan events
-    torch.autograd.set_detect_anomaly(True)
+    #torch.autograd.set_detect_anomaly(True)
 
     trainer.run(train_loader, max_epochs=epochs)
 
     pbar.close()
 
-
-@hydra.main(config_path=str("../../config"), config_name="default")
-def main(cfg: DictConfig):
-
-    reset_seeds(cfg.train.random_seed)
-    #sd = Dataset.get(dataset_project="t4c", dataset_name="default").get_mutable_local_copy("data/raw")
-    task = Task.init(project_name='t4c', task_name='train_model')
-    t4c_apply_basic_logging_config()
+def train(rank, cfg, task):
 
     # Uses cfg.name to fetch clearml dataset which is used to instantiate
     # dataset object with a proper path.
 
+    device = idist.device()
     # TODO case when validation data comes from a different set
     try:
         root_dir = Dataset.get(dataset_project="t4c", dataset_name=cfg.model.dataset.root_dir).get_local_copy()
@@ -284,9 +275,8 @@ def main(cfg: DictConfig):
         logging.warning("device not set, torturing CPU.")
         device = "cpu"
         # TODO data parallelism and whitelist
-
-
-    optimizer = optim.Adam(model.network.parameters(), lr = cfg.train.optimizer.lr)
+    model.network = idist.auto_model(model.network)
+    optimizer = idist.auto_optim(optim.Adam(model.network.parameters(), lr = cfg.train.optimizer.lr))
     logging.info("Model instantiated.")
 
     # competitions = args.competitions
@@ -321,6 +311,22 @@ def main(cfg: DictConfig):
     # logging.info(system_status())
     run_model(
         task=task, model=model, optimizer=optimizer, cfg=cfg.train, valset=cfg.model.valset)
+
+
+@hydra.main(config_path=str("../../config"), config_name="default")
+def main(cfg: DictConfig):
+    spawn_kwargs = dict()
+    spawn_kwargs["nproc_per_node"] = 4
+    reset_seeds(cfg.train.random_seed)
+    #sd = Dataset.get(dataset_project="t4c", dataset_name="default").get_mutable_local_copy("data/raw")
+    task = Task.init(project_name='t4c', task_name='train_model')
+    t4c_apply_basic_logging_config()
+
+    backend="nccl"
+    with idist.Parallel(backend=backend, **spawn_kwargs) as parallel:
+        parallel.run(train, cfg, task)
+
+
 
     # for competition in competitions:
     #     additional_args = {}
