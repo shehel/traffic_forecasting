@@ -4,16 +4,16 @@ train_fraction: 1
 val_fraction: 0
 resume_checkpoint:
 device: 'cuda'
-epochs: 30
-data_parallel: True
+epochs: 3
+data_parallel:
 device_ids:
-amp_mode: amp
-scaler: True
+amp_mode:
+scaler:
 optimizer:
   lr: 1e-4
   weight_decay: 0.0001
 dataloader:
   shuffle: True
-  batch_size: 16
+  batch_size: 2
   num_workers: 4
   train_eval: 1000

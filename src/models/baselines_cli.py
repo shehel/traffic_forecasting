@@ -36,6 +36,7 @@ from ignite.handlers import DiskSaver
 from ignite.handlers import global_step_from_engine
 from ignite.metrics import Loss
 from ignite.metrics import RunningAverage
+from ignite.utils import convert_tensor
 
 from ignite.contrib.engines.common import save_best_model_by_val_score
 
@@ -176,10 +177,11 @@ def prepare_batch_fn(batch, device, non_blocking):
 
     dynamic = convert_tensor(dynamic, device, non_blocking)
     static = convert_tensor(static, device, non_blocking)
-    static = convert_tensor(target, device, non_blocking)
+    target = convert_tensor(target, device, non_blocking)
     dynamic = dynamic.reshape(-1, 96, 495, 436)
     dynamic = F.pad(dynamic, pad=(6, 6, 1, 0))
     target = target.reshape(-1, 48, 495, 436)
+    target = F.pad(target, pad=(6, 6, 1, 0))
     static = F.pad(static, pad=(6, 6, 1, 0))
     input_batch = torch.cat([dynamic, static], dim=1)
 
@@ -192,10 +194,13 @@ def output_transform_fn(x, y, y_pred, loss):
 
 def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loader, val_loader, train_model, checkpoints_dir, amp_mode, scaler):
     # Validator
-    validation_evaluator = create_supervised_evaluator(train_model, metrics={"val_loss": Loss(loss), "neg_val_loss": Loss(loss)*-1}, device=device, amp_mode=amp_mode)
+    validation_evaluator = create_supervised_evaluator(train_model, metrics={"val_loss": Loss(loss), "neg_val_loss": Loss(loss)*-1}, device=device, amp_mode=amp_mode,
+                                                       prepare_batch=prepare_batch_fn)
     # Trainer
-    trainer = create_supervised_trainer(train_model, optimizer, loss, device=device, amp_mode=amp_mode, scaler=scaler)
-    train_evaluator = create_supervised_evaluator(train_model, metrics={"loss": Loss(loss)}, device=device, amp_mode=amp_mode)
+    trainer = create_supervised_trainer(train_model, optimizer, loss, device=device, amp_mode=amp_mode, scaler=scaler,
+                                        prepare_batch = prepare_batch_fn)
+    train_evaluator = create_supervised_evaluator(train_model, metrics={"loss": Loss(loss)}, device=device, amp_mode=amp_mode,
+                                                  prepare_batch=prepare_batch_fn)
     run_id = binascii.hexlify(os.urandom(15)).decode("utf-8")
     artifacts_path = os.path.join(os.path.curdir, f"artifacts/{run_id}")
     logs_path = os.path.join(artifacts_path, "tensorboard")
