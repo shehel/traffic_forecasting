@@ -12,7 +12,7 @@ optimizer:
   weight_decay: 0.0001
 dataloader:
   shuffle: True
-  batch_size: 64
+  batch_size: 32
   num_workers: 4
   train_eval: 1000
 transform:

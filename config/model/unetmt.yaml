@@ -2,7 +2,7 @@ _target_: src.models.model.Model
 network:
     _target_: src.models.unet_mt.UNetMT
     in_channels: 105 # 12*8+9
-    out_channels: 24 # 6*8
+    out_channels: 6 # 6*8
     depth: 2
     wf: 6
     padding: True
@@ -21,9 +21,9 @@ dataset:
   output_start: 0
   output_step: 2
   reduced: False
-  single_channel:
+  single_channel: True
   time_step:
-  perm: False
+  perm: True
 
 valset: True
 valset_limit:

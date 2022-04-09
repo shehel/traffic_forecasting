@@ -52,7 +52,7 @@ class UNetMT(nn.Module):
         assert up_mode in ("upconv", "upsample")
         self.padding = padding
         self.depth = depth
-        out_channels = 4
+        out_channels = 1
         prev_channels = in_channels
         self.down_path = nn.ModuleList()
         for i in range(depth):
