@@ -97,9 +97,9 @@ class T4CDataset(Dataset):
         for city in static_list:
             self.static_dict[city.parts[-2]] = load_h5_file(city)
         self.file_list.sort()
-        for file in self.file_list:
-            self.files.append(load_h5_file(file))
-        self.len = len(self.files) * MAX_TEST_SLOT_INDEX
+        # for file in self.file_list:
+        #     self.files.append(load_h5_file(file))
+        self.len = len(self.file_list) * MAX_TEST_SLOT_INDEX
 
     def _load_h5_file(self, fn, sl: Optional[slice]):
         if self.use_npy:
@@ -122,8 +122,8 @@ class T4CDataset(Dataset):
         start_hour = idx % MAX_TEST_SLOT_INDEX
 
 
-        #two_hours = self._load_h5_file(self.files[file_idx], sl=slice(start_hour, start_hour + 12 * 2 + 1))
-        two_hours = self.files[file_idx][start_hour:start_hour+24]
+        two_hours = self._load_h5_file(self.file_list[file_idx], sl=slice(start_hour, start_hour + 12 * 2 + 1))
+        #two_hours = self.files[file_idx][start_hour:start_hour+24]
 
         two_hours = two_hours[:,::self.sampling_height,::self.sampling_width,self.dim_start::self.dim_step]
 
@@ -160,6 +160,7 @@ class T4CDataset(Dataset):
         data = torch.from_numpy(data)
         data = data.to(dtype=torch.float)
         return data
+
 def train_collate_fn(batch):
     dynamic_input_batch, static_input_batch, target_batch = zip(*batch)
     dynamic_input_batch = np.stack(dynamic_input_batch, axis=0)

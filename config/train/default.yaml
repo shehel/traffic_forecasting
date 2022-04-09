@@ -1,12 +1,10 @@
 random_seed: 123
-
 train_fraction: 1
 val_fraction: 0
 resume_checkpoint:
-device: 'cuda'
 epochs: 3
-data_parallel:
-device_ids:
+parallel_backend: "nccl"
+n_process: 1
 amp_mode:
 scaler:
 optimizer:
@@ -15,5 +13,14 @@ optimizer:
 dataloader:
   shuffle: True
   batch_size: 2
-  num_workers: 4
-  train_eval: 1000
+  num_workers: 1
+  train_eval: 50
+transform:
+  in_h: 495
+  in_w: 436
+  pad_tuple:
+  - 6
+  - 6
+  - 1
+  - 0
+  static: True

@@ -74,22 +74,59 @@ def reset_seeds(seed):
 
 
 def run_model(
-    task: Task,
-    model: Model,
-    optimizer: optim,
-    cfg: DictConfig,
-    valset: bool
-):  # noqa
+        rank: int,
+        task: Task,
+        cfg: DictConfig,
+    ):  # noqa
+    logging.info(
+        idist.get_rank(),
+        ": ",
+        "backend=",
+        idist.backend(),
+        "- world size",
+        idist.get_world_size(),
+    )
+
+    device = idist.device()
+    logging.info(f"Using device {device}")
+    # Fetch dataset if it exists in clearml server, otherwise
+    # assume config contains path and try local dir
+    try:
+        root_dir = Dataset.get(dataset_project="t4c", dataset_name=cfg.model.dataset.root_dir).get_local_copy()
+    except:
+        root_dir = cfg.model.dataset.root_dir
+        logging.info(f"Could not find dataset in clearml server. Using {root_dir} as path.")
+
+    #
+    # TODO Model restricted to unet.
+    if cfg.train.resume_checkpoint is not None:
+        logging.info("Reload checkpoint %s", cfg.train.resume_checkpoint)
+        #load_torch_model_from_checkpoint(checkpoint=cfg.train.resume_checkpoint, model=model.network)
+        to_load = {"train_model": model.network}
+        checkpoint = torch.load(cfg.train.resume_checkpoint)
+        #Checkpoint.load_objects(to_load, checkpoint, map_location=torch.device('cuda'))
+        model.network.load_state_dict(checkpoint['train_model'].module.state_dict())
+        # TODO
+        #optimizer.load_state_dict(checkpoint['optimizer'].state_dict())
+
+            # https://stackoverflow.com/questions/59249563/runtimeerror-module-must-have-its-parameters-and-buffers-on-device-cuda1-devi
+
+    model = instantiate(cfg.model, dataset={"root_dir":root_dir})
+    assert len(model.t_dataset) > 0
+    model.network = idist.auto_model(model.network)
+
+    optimizer = idist.auto_optim(optim.Adam(model.network.parameters(), lr = cfg.train.optimizer.lr))
+    logging.info("Model and optimizer instantiated.")
 
     logging.info("dataset has size %s", len(model.t_dataset))
-    if valset == True:
+    if cfg.model.valset == True:
         logging.info("val dataset has size %s", len(model.v_dataset))
 
     # Train / Dev / Test set splits
     logging.info("train/dev split")
     full_dataset_size = len(model.t_dataset)
 
-    if valset == True:
+    if cfg.model.valset == True:
         full_dataset_size_val = len(model.v_dataset)
         effective_val_dataset_size = full_dataset_size_val
 
@@ -106,38 +143,36 @@ def run_model(
 
     indices = list(range(full_dataset_size))
 
-    if valset == True:
+    if cfg.model.valset == True:
         val_indices = list(range(full_dataset_size_val))
         np.random.shuffle(val_indices)
 
     np.random.shuffle(indices)
 
-    assert np.isclose(cfg.train_fraction + cfg.val_fraction, 1.0)
-    num_train_items = max(int(np.floor(cfg.train_fraction * effective_dataset_size)), cfg.dataloader.batch_size)
+    assert np.isclose(cfg.train.train_fraction + cfg.train.val_fraction, 1.0)
+    num_train_items = max(int(np.floor(cfg.train.train_fraction * effective_dataset_size)),
+                          cfg.train.dataloader.batch_size)
 
-    if valset == True:
-        num_val_items = max(int(np.floor(effective_val_dataset_size)), cfg.dataloader.batch_size)
+    if cfg.model.valset == True:
+        num_val_items = max(int(np.floor(effective_val_dataset_size)), cfg.train.dataloader.batch_size)
         train_indices, dev_indices = indices[:num_train_items], val_indices[:num_val_items]
     else:
-        num_val_items = max(int(np.floor(cfg.val_fraction * effective_dataset_size)), cfg.dataloader.batch_size)
+        num_val_items = max(int(np.floor(cfg.train.val_fraction * effective_dataset_size)), cfg.train.dataloader.batch_size)
         train_indices, dev_indices = indices[:num_train_items], indices[num_train_items : num_train_items + num_val_items]
     logging.info(
         "Taking %s from dataset of length %s, splitting into %s train items, %s train eval items and %s val items",
         effective_dataset_size,
         full_dataset_size,
         num_train_items,
-        min([cfg.dataloader.train_eval, num_train_items]),
+        min([cfg.train.dataloader.train_eval, num_train_items]),
         num_val_items,
     )
 
-    # Data loaders
-    # No geometric
     train_sampler = SubsetRandomSampler(train_indices)
     dev_sampler = SubsetRandomSampler(dev_indices)
 
-    #train_loader = DataLoader(model.t_dataset, batch_size=cfg.dataloader.batch_size, num_workers=cfg.dataloader.num_workers,
-    #                          sampler=train_sampler)
-    train_loader = idist.auto_dataloader(model.t_dataset, batch_size=cfg.dataloader.batch_size, num_workers=cfg.dataloader.num_workers,
+    train_loader = idist.auto_dataloader(model.t_dataset, batch_size=cfg.train.dataloader.batch_size,
+                                         num_workers=cfg.train.dataloader.num_workers,
                               sampler=train_sampler, collate_fn=train_collate_fn, pin_memory=True, drop_last=True)
 
 
@@ -145,60 +180,76 @@ def run_model(
     # train loss which is prohibitively long. If the number of samplers
     # specified for traing evaluation is more than number of samples in
     # training set, default to train loader for loss calculation
-    if cfg.dataloader.train_eval and cfg.dataloader.train_eval < num_train_items:
-        train_eval_sampler = SubsetRandomSampler(indices[:cfg.dataloader.train_eval])
-        train_eval_loader = idist.auto_dataloader(model.t_dataset, batch_size=cfg.dataloader.batch_size, num_workers=cfg.dataloader.num_workers,
-                              sampler=train_eval_sampler, collate_fn=train_collate_fn, pin_memory=True, drop_last=True)
+    if cfg.train.dataloader.train_eval and cfg.train.dataloader.train_eval < num_train_items:
+        train_eval_sampler = SubsetRandomSampler(indices[:cfg.train.dataloader.train_eval])
+        train_eval_loader = idist.auto_dataloader(model.t_dataset, batch_size=cfg.train.dataloader.batch_size,
+                                                  num_workers=cfg.train.dataloader.num_workers,
+                              sampler=train_eval_sampler, collate_fn=train_collate_fn, pin_memory=True)
     else:
         train_eval_loader = train_loader
 
-    if valset:
-        val_loader = idist.auto_dataloader(model.v_dataset, batch_size=cfg.dataloader.batch_size,
-                            num_workers=cfg.dataloader.num_workers, sampler=dev_sampler, collate_fn=train_collate_fn, pin_memory=True)
+    if cfg.model.valset:
+        val_loader = idist.auto_dataloader(model.v_dataset, batch_size=cfg.train.dataloader.batch_size,
+                            num_workers=cfg.train.dataloader.num_workers, sampler=dev_sampler, collate_fn=train_collate_fn, pin_memory=True)
     else:
-        val_loader = idist.auto_dataloader(model.t_dataset, batch_size=cfg.dataloader.batch_size,
-                            num_workers=cfg.dataloader.num_workers, sampler=dev_sampler, collate_fn =train_collate_fn, pin_memory=True)
+        val_loader = idist.auto_dataloader(model.t_dataset, batch_size=cfg.train.dataloader.batch_size,
+                            num_workers=cfg.train.dataloader.num_workers, sampler=dev_sampler, collate_fn =train_collate_fn, pin_memory=True)
 
         # Loss
     loss = F.mse_loss
 
+    logging.info("Going to run train_model.")
+    # logging.info(system_status())
+
     checkpoints_dir = os.path.join(os.path.curdir, "checkpoints")
-    train_ignite(cfg.device, cfg.epochs, loss, optimizer, train_loader, train_eval_loader, val_loader, model.network, checkpoints_dir, cfg.amp_mode, cfg.scaler)
-    logging.info("End training of train_model %s on %s for %s epochs", model.network, cfg.device, cfg.epochs)
+    train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_loader, model.network, checkpoints_dir, cfg)
+    logging.info("End training of train_model %s on %s for %s epochs", model.network, device, cfg.train.epochs)
 
     # Upload checkpoint folder containing model with best val score
     task.upload_artifact(name='model_checkpoint', artifact_object=checkpoints_dir)
 
-    return model
-
-def prepare_batch_fn(batch, device, non_blocking):
-    dynamic, static, target  = batch
-
-    # return a tuple of (x, y) that can be directly runned as
-    # `loss_fn(model(x), y)`
-
-    dynamic = convert_tensor(dynamic, device, non_blocking)
-    static = convert_tensor(static, device, non_blocking)
-    target = convert_tensor(target, device, non_blocking)
-    dynamic = dynamic.reshape(-1, 96, 495, 436)
-    dynamic = F.pad(dynamic, pad=(6, 6, 1, 0))
-    target = target.reshape(-1, 48, 495, 436)
-    target = F.pad(target, pad=(6, 6, 1, 0))
-    static = F.pad(static, pad=(6, 6, 1, 0))
-    input_batch = torch.cat([dynamic, static], dim=1)
-
-    return input_batch, target
-
-def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loader, val_loader, train_model, checkpoints_dir, amp_mode, scaler):
+def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_loader,
+                 train_model, checkpoints_dir, cfg):
     # Validator
+    is_static = cfg.train.transform.static
+    if is_static:
+        dynamic_channels = cfg.model.network.in_channels - 9
+    else:
+        dynamic_channels = cfg.model.network.in_channels
+
+    out_channels = cfg.model.network.out_channels
+
+    in_h = cfg.train.transform.in_h
+    in_w = cfg.train.transform.in_w
+    epochs = cfg.train.epochs
+    amp_mode = cfg.train.amp_mode
+    scaler = cfg.train.scaler
+    pad_tuple = tuple(cfg.train.transform.pad_tuple)
+
+
+    def prepare_batch_fn(batch, device, non_blocking):
+        dynamic, static, target  = batch
+        dynamic = convert_tensor(dynamic, device, non_blocking)
+        target = convert_tensor(target, device, non_blocking)
+        dynamic = dynamic.reshape(-1, dynamic_channels, in_h, in_w)
+        target = target.reshape(-1, out_channels, in_h, in_w)
+        target = F.pad(target, pad=pad_tuple)
+        static = convert_tensor(static, device, non_blocking)
+        if is_static:
+            input_batch = torch.cat([dynamic, static], dim=1)
+            input_batch = F.pad(input_batch, pad=pad_tuple)
+
+        return input_batch, target
 
     validation_evaluator = create_supervised_evaluator(train_model, metrics={"val_loss": Loss(loss), "neg_val_loss": Loss(loss)*-1}, device=device, amp_mode=amp_mode,
                                                        prepare_batch=prepare_batch_fn)
-    # Trainer
-    trainer = create_supervised_trainer(train_model, optimizer, loss, device=device, amp_mode=amp_mode, scaler=scaler,
-                                        prepare_batch = prepare_batch_fn)
     train_evaluator = create_supervised_evaluator(train_model, metrics={"loss": Loss(loss)}, device=device, amp_mode=amp_mode,
                                                   prepare_batch=prepare_batch_fn)
+
+    # Trainer
+    trainer = create_supervised_trainer(train_model, optimizer, loss, device=device,
+                                        amp_mode=amp_mode, scaler=scaler,
+                                        prepare_batch = prepare_batch_fn)
     run_id = binascii.hexlify(os.urandom(15)).decode("utf-8")
     artifacts_path = os.path.join(os.path.curdir, f"artifacts/{run_id}")
     logs_path = os.path.join(artifacts_path, "tensorboard")
@@ -212,6 +263,7 @@ def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loade
         # logging.info(system_status()
 
     @trainer.on(Events.EPOCH_COMPLETED)  # noqa
+    @trainer.on(Events.EPOCH_STARTED)  # noqa
     def log_epoch_summary(engine: Engine):
         # Training
         train_evaluator.run(train_eval_loader)
@@ -240,9 +292,9 @@ def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loade
         tag="validation",
         metric_names=["val_loss"],
         global_step_transform=global_step_from_engine(trainer),
-    #)
+    )
     to_save = {"train_model": train_model, "optimizer": optimizer}
-    checkpoint_handler = Checkpoint(to_save, DiskSaver(checkpoints_dir, create_dir=True, require_empty=False), n_saved=20)
+    checkpoint_handler = Checkpoint(to_save, DiskSaver(checkpoints_dir, create_dir=True, require_empty=False), n_saved=2)
     checkpoint_handler = save_best_model_by_val_score(checkpoints_dir, validation_evaluator, to_save,
                                                       metric_name="neg_val_loss", n_saved=1, trainer=trainer)
     validation_evaluator.add_event_handler(Events.COMPLETED, checkpoint_handler)
@@ -257,74 +309,17 @@ def train_ignite(device, epochs, loss, optimizer, train_loader, train_eval_loade
 
     pbar.close()
 
-def train(rank, cfg, task):
-
-    # Uses cfg.name to fetch clearml dataset which is used to instantiate
-    # dataset object with a proper path.
-
-    device = idist.device()
-    # TODO case when validation data comes from a different set
-    try:
-        root_dir = Dataset.get(dataset_project="t4c", dataset_name=cfg.model.dataset.root_dir).get_local_copy()
-    except:
-        root_dir = cfg.model.dataset.root_dir
-        logging.info(f"Could not find dataset in clearml server. Using {root_dir} as path.")
-
-    model = instantiate(cfg.model, dataset={"root_dir":root_dir})
-    if cfg.train.device is None:
-        logging.warning("device not set, torturing CPU.")
-        device = "cpu"
-        # TODO data parallelism and whitelist
-    model.network = idist.auto_model(model.network)
-    optimizer = idist.auto_optim(optim.Adam(model.network.parameters(), lr = cfg.train.optimizer.lr))
-    logging.info("Model instantiated.")
-
-    # competitions = args.competitions
-
-    # Data set
-    # TODO Removed untar operation and geometric datasets
-    assert len(model.t_dataset) > 0
-
-    # TODO Model restricted to unet.
-    if cfg.train.resume_checkpoint is not None:
-        logging.info("Reload checkpoint %s", cfg.train.resume_checkpoint)
-        #load_torch_model_from_checkpoint(checkpoint=cfg.train.resume_checkpoint, model=model.network)
-        to_load = {"train_model": model.network}
-        checkpoint = torch.load(cfg.train.resume_checkpoint)
-        #Checkpoint.load_objects(to_load, checkpoint, map_location=torch.device('cuda'))
-        model.network.load_state_dict(checkpoint['train_model'].module.state_dict())
-        # TODO
-        #optimizer.load_state_dict(checkpoint['optimizer'].state_dict())
-
-    if torch.cuda.is_available() and cfg.train.data_parallel:
-        # https://pytorch.org/tutorials/beginner/blitz/data_parallel_tutorial.html
-        if torch.cuda.device_count() > 1:
-            # https://stackoverflow.com/questions/59249563/runtimeerror-module-must-have-its-parameters-and-buffers-on-device-cuda1-devi
-            model.network = torch.nn.DataParallel(model.network, device_ids=cfg.train.device_ids)
-            logging.info(f"Let's use {len(model.network.device_ids)} GPUs: {model.network.device_ids}!")
-            device = f"cuda:{model.network.device_ids[0]}"
-
-
-    model.network = model.network.to(cfg.train.device)
-
-    logging.info("Going to run train_model.")
-    # logging.info(system_status())
-    run_model(
-        task=task, model=model, optimizer=optimizer, cfg=cfg.train, valset=cfg.model.valset)
-
-
 @hydra.main(config_path=str("../../config"), config_name="default")
 def main(cfg: DictConfig):
     spawn_kwargs = dict()
-    spawn_kwargs["nproc_per_node"] = 4
+    spawn_kwargs["nproc_per_node"] = cfg.train.n_process
     reset_seeds(cfg.train.random_seed)
     #sd = Dataset.get(dataset_project="t4c", dataset_name="default").get_mutable_local_copy("data/raw")
     task = Task.init(project_name='t4c', task_name='train_model')
     t4c_apply_basic_logging_config()
 
-    backend="nccl"
-    with idist.Parallel(backend=backend, **spawn_kwargs) as parallel:
-        parallel.run(train, cfg, task)
+    with idist.Parallel(backend=cfg.train.parallel_backend, **spawn_kwargs) as parallel:
+        parallel.run(run_model, task, cfg)
 
 
 

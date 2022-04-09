@@ -24,7 +24,7 @@ import pdb
 
 class UNet(nn.Module):
     def __init__(
-        self, in_channels=1, n_classes=2, depth=5, wf=6, padding=False, batch_norm=False, up_mode="upconv",
+        self, in_channels=1, out_channels=2, depth=5, wf=6, padding=False, batch_norm=False, up_mode="upconv",
     ):
         """
         Implementation of
@@ -35,7 +35,7 @@ class UNet(nn.Module):
         in the original paper
         Args:
             in_channels (int): number of input channels
-            n_classes (int): number of output channels
+            out_channels (int): number of output channels
             depth (int): depth of the network
             wf (int): number of filters in the first layer is 2**wf
             padding (bool): if True, apply padding such that the input shape
@@ -63,7 +63,7 @@ class UNet(nn.Module):
             self.up_path.append(UNetUpBlock(prev_channels, 2 ** (wf + i), up_mode, padding, batch_norm))
             prev_channels = 2 ** (wf + i)
 
-        self.last = nn.Conv2d(prev_channels, n_classes, kernel_size=1)
+        self.last = nn.Conv2d(prev_channels, out_channels, kernel_size=1)
 
     def forward(self, x, *args, **kwargs):
         blocks = []
