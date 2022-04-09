@@ -1,10 +1,9 @@
-
 _target_: src.models.model.Model
 network:
-    _target_: src.models.unet.UNet
+    _target_: src.models.unet_mt.UNetMT
     in_channels: 105 # 12*8+9
-    out_channels: 48 # 6*8
-    depth: 5
+    out_channels: 24 # 6*8
+    depth: 2
     wf: 6
     padding: True
     up_mode: 'upconv'
@@ -20,7 +19,7 @@ dataset:
   dim_start: 0
   dim_step: 1
   output_start: 0
-  output_step: 1
+  output_step: 2
   reduced: False
   single_channel:
   time_step:

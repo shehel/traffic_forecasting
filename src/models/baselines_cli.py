@@ -68,16 +68,19 @@ def reset_seeds(seed):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    #torch.backends.cudnn.deterministic = True
+    #torch.backends.cudnn.benchmark = False
     os.environ['PYTHONHASHSEED'] = str(seed)
 
 
 def run_model(
         rank: int,
         task: Task,
+        root_dir: str,
         cfg: DictConfig,
     ):  # noqa
+
+    t4c_apply_basic_logging_config()
     logging.info(
         idist.get_rank(),
         ": ",
@@ -91,13 +94,11 @@ def run_model(
     logging.info(f"Using device {device}")
     # Fetch dataset if it exists in clearml server, otherwise
     # assume config contains path and try local dir
-    try:
-        root_dir = Dataset.get(dataset_project="t4c", dataset_name=cfg.model.dataset.root_dir).get_local_copy()
-    except:
-        root_dir = cfg.model.dataset.root_dir
-        logging.info(f"Could not find dataset in clearml server. Using {root_dir} as path.")
 
     #
+    model = instantiate(cfg.model, dataset={"root_dir":root_dir})
+    assert len(model.t_dataset) > 0
+
     # TODO Model restricted to unet.
     if cfg.train.resume_checkpoint is not None:
         logging.info("Reload checkpoint %s", cfg.train.resume_checkpoint)
@@ -111,8 +112,7 @@ def run_model(
 
             # https://stackoverflow.com/questions/59249563/runtimeerror-module-must-have-its-parameters-and-buffers-on-device-cuda1-devi
 
-    model = instantiate(cfg.model, dataset={"root_dir":root_dir})
-    assert len(model.t_dataset) > 0
+
     model.network = idist.auto_model(model.network)
 
     optimizer = idist.auto_optim(optim.Adam(model.network.parameters(), lr = cfg.train.optimizer.lr))
@@ -173,7 +173,7 @@ def run_model(
 
     train_loader = idist.auto_dataloader(model.t_dataset, batch_size=cfg.train.dataloader.batch_size,
                                          num_workers=cfg.train.dataloader.num_workers,
-                              sampler=train_sampler, collate_fn=train_collate_fn, pin_memory=True, drop_last=True)
+                              sampler=train_sampler, collate_fn=train_collate_fn, pin_memory=False, drop_last=True)
 
 
     # Needed as train evaluator uses the entire training set for
@@ -184,16 +184,16 @@ def run_model(
         train_eval_sampler = SubsetRandomSampler(indices[:cfg.train.dataloader.train_eval])
         train_eval_loader = idist.auto_dataloader(model.t_dataset, batch_size=cfg.train.dataloader.batch_size,
                                                   num_workers=cfg.train.dataloader.num_workers,
-                              sampler=train_eval_sampler, collate_fn=train_collate_fn, pin_memory=True)
+                                                  sampler=train_eval_sampler, collate_fn=train_collate_fn, pin_memory=False)
     else:
         train_eval_loader = train_loader
 
     if cfg.model.valset:
         val_loader = idist.auto_dataloader(model.v_dataset, batch_size=cfg.train.dataloader.batch_size,
-                            num_workers=cfg.train.dataloader.num_workers, sampler=dev_sampler, collate_fn=train_collate_fn, pin_memory=True)
+                                           num_workers=cfg.train.dataloader.num_workers, sampler=dev_sampler, collate_fn=train_collate_fn, pin_memory=False)
     else:
         val_loader = idist.auto_dataloader(model.t_dataset, batch_size=cfg.train.dataloader.batch_size,
-                            num_workers=cfg.train.dataloader.num_workers, sampler=dev_sampler, collate_fn =train_collate_fn, pin_memory=True)
+                                           num_workers=cfg.train.dataloader.num_workers, sampler=dev_sampler, collate_fn =train_collate_fn, pin_memory=False)
 
         # Loss
     loss = F.mse_loss
@@ -263,7 +263,6 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
         # logging.info(system_status()
 
     @trainer.on(Events.EPOCH_COMPLETED)  # noqa
-    @trainer.on(Events.EPOCH_STARTED)  # noqa
     def log_epoch_summary(engine: Engine):
         # Training
         train_evaluator.run(train_eval_loader)
@@ -316,10 +315,15 @@ def main(cfg: DictConfig):
     reset_seeds(cfg.train.random_seed)
     #sd = Dataset.get(dataset_project="t4c", dataset_name="default").get_mutable_local_copy("data/raw")
     task = Task.init(project_name='t4c', task_name='train_model')
-    t4c_apply_basic_logging_config()
+
+    try:
+        root_dir = Dataset.get(dataset_project="t4c", dataset_name=cfg.model.dataset.root_dir).get_local_copy()
+    except:
+        root_dir = cfg.model.dataset.root_dir
+        logging.info(f"Could not find dataset in clearml server. Using {root_dir} as path.")
 
     with idist.Parallel(backend=cfg.train.parallel_backend, **spawn_kwargs) as parallel:
-        parallel.run(run_model, task, cfg)
+        parallel.run(run_model, task, root_dir, cfg)
 
 
 
