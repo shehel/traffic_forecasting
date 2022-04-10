@@ -21,7 +21,7 @@ dataset:
   output_start: 0
   output_step: 1
   reduced: False
-  single_channel:
+  single_channel: true
   time_step:
   perm: False
 

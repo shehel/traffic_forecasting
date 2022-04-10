@@ -5,4 +5,4 @@ core:
 
 defaults:
   - model: unetmt
-  - train: default
+  - train: test

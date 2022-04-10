@@ -26,10 +26,11 @@ from ignite.handlers import DiskSaver
 from ignite.handlers import global_step_from_engine
 from ignite.metrics import Loss
 from ignite.metrics import RunningAverage
+from ignite.utils import convert_tensor
 from torch.utils.data import DataLoader
 from torch.utils.data import SubsetRandomSampler
 
-from src.data.dataset import T4CDataset
+from src.data.dataset import T4CDataset, train_collate_fn
 
 import matplotlib.pyplot as plt
 from PIL import Image
@@ -149,7 +150,7 @@ def plot_dims(logger, true_series, pred_series, dim=8):
         )
 
 
-def unstack_on_time(data: torch.Tensor, batch_dim:bool = False, num_channels=4):
+def unstack_on_time(data: torch.Tensor, batch_dim:bool = False, num_channels=4, crop= None):
         """
         `(k, 12 * 8, 495, 436) -> (k, 12, 495, 436, 8)`
         """
@@ -165,6 +166,12 @@ def unstack_on_time(data: torch.Tensor, batch_dim:bool = False, num_channels=4):
                                     num_channels,
                                     height,
                                     width))
+        if crop is not None:
+            left, right, top, bottom = crop
+            right = width - right
+            bottom = height - bottom
+            data = data[:, :,:, top:bottom, left:right]
+
 
         # (k, 12, 8, 495, 436) -> (k, 12, 495, 436, 8)
         data = torch.moveaxis(data, 2, 4)
@@ -173,6 +180,26 @@ def unstack_on_time(data: torch.Tensor, batch_dim:bool = False, num_channels=4):
             # `(1, 12, 495, 436, 8) -> (12, 495, 436, 8)`
             data = torch.squeeze(data, 0)
         return data
+
+def prepare_data(batch, dynamic_channels, out_channels, transform_p, switch=None):
+        in_h = transform_p['in_h']
+        in_w = transform_p['in_w']
+        is_static = transform_p['static']
+        pad_tuple = tuple(transform_p['pad_tuple'])
+        if is_static == True:
+            dynamic_channels = dynamic_channels - 9
+        dynamic, static, target  = batch
+        dynamic = dynamic.reshape(-1, dynamic_channels, in_h, in_w)
+        if switch is not None:
+            dynamic = dynamic[:,switch.flatten(),:,:]
+
+        #target = target.reshape(-1, out_channels, in_h, in_w)
+        #target = F.pad(target, pad=pad_tuple)
+        if is_static:
+            input_batch = torch.cat([dynamic, static], dim=1)
+            input_batch = F.pad(input_batch, pad=pad_tuple)
+
+        return input_batch, target
 
 """
 Provides evaluation information for a given model and dataset.
@@ -186,8 +213,8 @@ def main():
     task = Task.init(project_name="t4c_eval", task_name="Chx tsx 7days")
     logger = task.get_logger()
     args = {
-        'task_id': '5a1611b125ad4859bebbbe79d6bb9749',
-        'batch_size': 4,
+        'task_id': '793b6704235441e3b668e5bb360e8272',
+        'batch_size': 1,
         'num_workers': 0,
         'pixel': (108, 69),
         'loader': 'val',
@@ -196,7 +223,6 @@ def main():
         'viz_idx': 0,
         'time_step': 0, #time step to plot
         'max_idx': 240
-
     }
 
     task.connect(args)
@@ -217,13 +243,15 @@ def main():
         is_perm = True
         cfg.model.dataset.perm = False
         cfg.model.dataset.single_channel = None
+    else:
+        is_perm = False
     model = instantiate(cfg.model, dataset={"root_dir":root_dir})
-    #model_path = train_task.artifacts['model_checkpoint'].get_local_copy()
+    model_path = train_task.artifacts['model_checkpoint'].get_local_copy()
     network = model.network
     network = network.to('cuda')
-    model_path = "/data/t5chx.pt"
-    model_state_dict = torch.load(model_path)
-    #model_state_dict = torch.load(model_path+'/'+os.listdir(model_path)[0])#,map_location=torch.device('cpu'))
+    #model_path = "/data/t5chx.pt"
+    #model_state_dict = torch.load(model_path)
+    model_state_dict = torch.load(model_path+'/'+os.listdir(model_path)[0])#,map_location=torch.device('cpu'))
     network.load_state_dict(model_state_dict['train_model'])
     network.eval()
 
@@ -236,9 +264,9 @@ def main():
     g.manual_seed(123)
 
     if args['loader'] == 'val':
-        loader = DataLoader(model.v_dataset, batch_size=bs, num_workers=args['num_workers'], worker_init_fn=seed_worker, generator=g, shuffle=False)
+        loader = DataLoader(model.v_dataset, batch_size=bs, num_workers=args['num_workers'], worker_init_fn=seed_worker, generator=g, shuffle=False, collate_fn=train_collate_fn)
     else:
-        loader = DataLoader(model.t_dataset, batch_size=bs, num_workers=args['num_workers'], worker_init_fn=seed_worker, generator=g, shuffle=False)
+        loader = DataLoader(model.t_dataset, batch_size=bs, num_workers=args['num_workers'], worker_init_fn=seed_worker, generator=g, shuffle=False, collate_fn=train_collate_fn)
     print ('Dataloader first few files: {}'.format(loader.dataset.file_list[:10]))
 
     trues = np.zeros((max_idx, d))
@@ -266,14 +294,17 @@ def main():
     pixel_x, pixel_y = args['pixel']
     t = args['time_step']
 
-
+    hack_map = [1, 2, 3, 0]
     if is_perm == False:
         for idx, i in (enumerate(loader)):
-            batch_prediction = network(i[0].to('cuda'))
-            batch_prediction = batch_prediction.cpu().detach()#.numpy()
+            inp, true = prepare_data(i, cfg.model.network.in_channels,
+                                      cfg.model.network.out_channels, cfg.train.transform)
+            pred = network(inp.to("cuda"))
+            pred = pred.cpu().detach()#.numpy()
 
-            pred = model.t_dataset.transform.post_transform(batch_prediction)
-            true = model.t_dataset.transform.post_transform(i[1])
+            pred = unstack_on_time(pred, d, num_channels=d,
+                                       crop = tuple(cfg.train.transform.pad_tuple))
+            true = torch.moveaxis(true, 2, 4)
 
             # pred1 = pred[:,0,:,:,0]
             # true1 = true[:,0,:,:,0]
@@ -314,26 +345,34 @@ def main():
             #if idx==240:
             #break
     else:
-        try:
-            time_steps = cfg.model.data.set.time_step
-        except:
+        if cfg.model.dataset.time_step is None:
             print("Using default timesteps 6")
             time_steps = 6
-        pred_comb = np.zeros((bs, time_steps, 495, 436, d))
-        true_comb = np.zeros((bs, time_steps, 495, 436, d))
+        else:
+            time_steps = cfg.model.dataset.time_step
+        h = 495
+        w = 436
+        pred_comb = np.zeros((bs, time_steps, h, w, d))
+        true_comb = np.zeros((bs, time_steps, h, w, d))
         for idx, i in (enumerate(loader)):
             for directions in range(4):
                 switch = perm[directions]
                 for c in range(1,12): switch = np.vstack([switch, perm[directions]+(8*c)])
-                inp = i[0][:,switch.flatten(),:,:]
-                outp = i[1][:,directions::4,:,:] 
-                batch_prediction = network(inp.to('cuda'))
-                batch_prediction = batch_prediction.cpu().detach()#.numpy()
+                inp, true = prepare_data(i, cfg.model.network.in_channels,
+                                      cfg.model.network.out_channels, cfg.train.transform, switch)
+                true = torch.moveaxis(true, 2, 4)
 
-                pred = model.t_dataset.transform.post_transform(batch_prediction)
-                true = model.t_dataset.transform.post_transform(outp)
-                pred_comb[:, :, :, :,directions:directions+1] = pred.numpy()
-                true_comb[:, :, :, :,directions:directions+1] = true.numpy()
+                pred = network(inp.to('cuda'))
+                pred = pred.cpu().detach()#.numpy()
+
+                # Remove padding and unstack time channels from predictions
+                pred = unstack_on_time(pred, d, num_channels=1,
+                                       crop = tuple(cfg.train.transform.pad_tuple))
+
+
+
+                pred_comb[:, :, :, :,directions] = pred[:,:,:,0]#pred.numpy()
+                true_comb[:, :, :, :,directions] = true[:,:,:,:,directions]#outp.numpy()
 
 
                 if is_waveTransform:
@@ -348,13 +387,13 @@ def main():
                     true = ifm((Yl, Yh))
 
             try:
-                pred1 = pred_comb[:,0,:,:,1]
-                true1 = true_comb[:,0,:,:,1]
+                # timestep slice
+                #pred1 = pred_comb[:,0,:,:,1]
+                #true1 = true_comb[:,0,:,:,1]
                 #pred2 = pred_comb[:,5,:,:,1]
                 #true2 = true_comb[:,5,:,:,1]
 
                 mse.append(mean_squared_error(pred_comb.flatten(), true_comb.flatten()))
-                mse1.append(mean_squared_error(pred1.flatten(), true1.flatten()))
                 #mse2.append(mean_squared_error(pred2.flatten(), true2.flatten()))
                 print (mse)
 
@@ -386,7 +425,7 @@ def main():
 
     print (mse)
     print("Overall MSE: {}".format(sum(mse)/len(mse)))
-    print("MSE ts 0 ch2/8: {}".format(sum(mse1)/len(mse1)))
+    #print("MSE ts 0 ch2/8: {}".format(sum(mse1)/len(mse1)))
     #print("MSE ts 5 ch2/8: {}".format(sum(mse2)/len(mse2)))
     plot_dims(logger, trues, preds, d)
 if __name__ == "__main__":

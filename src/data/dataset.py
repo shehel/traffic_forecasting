@@ -171,4 +171,5 @@ def train_collate_fn(batch):
     static_input_batch = torch.from_numpy(static_input_batch)
     target_batch = np.moveaxis(target_batch, source=4, destination=2)
     target_batch = torch.from_numpy(target_batch).float()
+
     return dynamic_input_batch, static_input_batch, target_batch

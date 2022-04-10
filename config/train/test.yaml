@@ -3,8 +3,8 @@ train_fraction: 1
 val_fraction: 0
 resume_checkpoint:
 epochs: 2
-parallel_backend: "nccl"
-n_process: 1
+parallel_backend:
+n_process:
 amp_mode:
 scaler:
 optimizer:
