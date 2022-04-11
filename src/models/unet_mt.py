@@ -53,7 +53,7 @@ class UNetMT(nn.Module):
         self.padding = padding
         self.depth = depth
         # TODO outchannels should be variable
-        out_channels = 4
+        out_channels = 1
         prev_channels = in_channels
         self.down_path = nn.ModuleList()
         for i in range(depth):

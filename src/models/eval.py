@@ -213,7 +213,7 @@ def main():
     task = Task.init(project_name="t4c_eval", task_name="Chx tsx 7days")
     logger = task.get_logger()
     args = {
-        'task_id': '793b6704235441e3b668e5bb360e8272',
+        'task_id': '24a633fddb264affa5860f86fb6d1b08',
         'batch_size': 1,
         'num_workers': 0,
         'pixel': (108, 69),
@@ -321,6 +321,8 @@ def main():
                 Yh = [true[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
                 true = ifm((Yl, Yh))
 
+
+            print(mean_squared_error(pred.flatten(), true.flatten()))
             mse.append(mean_squared_error(pred.flatten(), true.flatten()))
             #mse1.append(mean_squared_error(pred1.flatten(), true1.flatten()))
             #mse2.append(mean_squared_error(pred2.flatten(), true2.flatten()))
@@ -336,9 +338,9 @@ def main():
                 p_true = (true[:,t, pixel_x, pixel_y, :].numpy())
                 trues[idx*bs:idx*bs+bs] = p_true
                 preds[idx*bs:idx*bs+bs] = p_pred
-            if len(args['viz_dir']) != 0:
-                if idx==args['viz_idx']:
-                    plot_tmaps(true[0].numpy(), pred[0].numpy(), args['viz_dir'], logger)
+            # if len(args['viz_dir']) != 0:
+            #     if idx==args['viz_idx']:
+                    # plot_tmaps(true[0].numpy(), pred[0].numpy(), args['viz_dir'], logger)
             #msenz.append(mse_func(pred.flatten(), true.flatten(), nonzero))
             #trues.extend(p_true)
             #preds.extend(p_pred)
@@ -369,11 +371,9 @@ def main():
                 pred = unstack_on_time(pred, d, num_channels=1,
                                        crop = tuple(cfg.train.transform.pad_tuple))
 
-
-
-                pred_comb[:, :, :, :,directions] = pred[:,:,:,0]#pred.numpy()
-                true_comb[:, :, :, :,directions] = true[:,:,:,:,directions]#outp.numpy()
-
+                #print (F.mse_loss(pred[:,:,:,:,0], true[:,:,:,:,directions]))
+                pred_comb[:, :, :, :,directions] = pred[:,:,:,:,0]#pred.numpy()
+                true_comb[:, :, :, :,directions] = true[:,:,:,:,hack_map[directions]]#outp.numpy()
 
                 if is_waveTransform:
                     _,_,rh,rw = pred.shape
