@@ -213,9 +213,9 @@ def main():
     task = Task.init(project_name="t4c_eval", task_name="Chx tsx 7days")
     logger = task.get_logger()
     args = {
-        'task_id': '24a633fddb264affa5860f86fb6d1b08',
-        'batch_size': 1,
-        'num_workers': 0,
+        'task_id': 'd8afe4598ce54f3787e208112b4ae7df',
+        'batch_size': 8,
+        'num_workers': 2,
         'pixel': (108, 69),
         'loader': 'val',
         'num_channels': 4,
@@ -322,6 +322,7 @@ def main():
                 true = ifm((Yl, Yh))
 
 
+            pred = np.clip(pred, 0, 255)
             print(mean_squared_error(pred.flatten(), true.flatten()))
             mse.append(mean_squared_error(pred.flatten(), true.flatten()))
             #mse1.append(mean_squared_error(pred1.flatten(), true1.flatten()))
@@ -385,7 +386,7 @@ def main():
                     Yl = true[:, :24,:,:]
                     Yh = [true[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
                     true = ifm((Yl, Yh))
-
+            pred_comb = np.clip(pred_comb, 0, 255)
             try:
                 # timestep slice
                 #pred1 = pred_comb[:,0,:,:,1]

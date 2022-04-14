@@ -97,6 +97,9 @@ def run_model(
 
     #
     model = instantiate(cfg.model, dataset={"root_dir":root_dir})
+    pytorch_total_params = sum(p.numel() for p in model.network.parameters() if p.requires_grad)
+    print (pytorch_total_params)
+    return
     assert len(model.t_dataset) > 0
 
     # TODO Model restricted to unet.
@@ -205,7 +208,7 @@ def run_model(
     train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_loader, model.network, checkpoints_dir, cfg)
     logging.info("End training of train_model %s on %s for %s epochs", model.network, device, cfg.train.epochs)
 
-    # Upload checkpoint folder containing model with best val score
+    # Upload checkpoint folder con
     task.upload_artifact(name='model_checkpoint', artifact_object=checkpoints_dir)
 
 def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_loader,
@@ -226,11 +229,17 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
     scaler = cfg.train.scaler
     pad_tuple = tuple(cfg.train.transform.pad_tuple)
 
+    dynamic_input_mean = np.load('data/processed/dynamic_input_mean.npy')
+    dynamic_input_std = np.load('data/processed/dynamic_input_std.npy')
+
+    dynamic_input_mean = torch.from_numpy(dynamic_input_mean)[None, None, :, None, None].float().cuda()
+    dynamic_input_std = torch.from_numpy(dynamic_input_std)[None, None, :, None, None].float().cuda()
 
     def prepare_batch_fn(batch, device, non_blocking):
         dynamic, static, target  = batch
         dynamic = convert_tensor(dynamic, device, non_blocking)
         target = convert_tensor(target, device, non_blocking)
+        dynamic = (dynamic - dynamic_input_mean) / dynamic_input_std
         dynamic = dynamic.reshape(-1, dynamic_channels, in_h, in_w)
         target = target.reshape(-1, out_channels, in_h, in_w)
         target = F.pad(target, pad=pad_tuple)
@@ -263,6 +272,7 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
         # logging.info(system_status()
 
     @trainer.on(Events.EPOCH_COMPLETED)  # noqa
+    @trainer.on(Events.EPOCH_STARTED)  # noqa
     def log_epoch_summary(engine: Engine):
         # Training
         train_evaluator.run(train_eval_loader)
