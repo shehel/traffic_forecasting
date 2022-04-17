@@ -50,6 +50,12 @@ perm = np.array([[0,1,2,3,4,5,6,7],
         [4,5,6,7,0,1,2,3],
         [6,7,0,1,2,3,4,5]
         ])
+# dynamic_input_mean = np.load('data/processed/dynamic_input_mean.npy')
+# dynamic_input_std = np.load('data/processed/dynamic_input_std.npy')
+
+# dynamic_input_mean = torch.from_numpy(dynamic_input_mean)[None, None, :, None, None].float()
+# dynamic_input_std = torch.from_numpy(dynamic_input_std)[None, None, :, None, None].float()
+
 
 def reset_seeds(seed):
     random.seed(seed)
@@ -79,7 +85,7 @@ def get_ani(mat):
     fig, ax = plt.subplots(figsize=(8, 8))
     imgs = []
     for img in mat:
-        img = ax.imshow(img, animated=True, vmax=np.median(img.flatten())+50)
+        img = ax.imshow(img, animated=True)
         imgs.append([img])
     ani = animation.ArtistAnimation(fig, imgs, interval=1000, blit=True, repeat_delay=3000)
     return ani.to_html5_video()
@@ -172,7 +178,7 @@ def unstack_on_time(data: torch.Tensor, batch_dim:bool = False, num_channels=4, 
             bottom = height - bottom
             data = data[:, :,:, top:bottom, left:right]
 
-
+        #data = (data+dynamic_input_mean)*dynamic_input_std
         # (k, 12, 8, 495, 436) -> (k, 12, 495, 436, 8)
         data = torch.moveaxis(data, 2, 4)
 
@@ -189,6 +195,7 @@ def prepare_data(batch, dynamic_channels, out_channels, transform_p, switch=None
         if is_static == True:
             dynamic_channels = dynamic_channels - 9
         dynamic, static, target  = batch
+        #dynamic = (dynamic - dynamic_input_mean) / dynamic_input_std
         dynamic = dynamic.reshape(-1, dynamic_channels, in_h, in_w)
         if switch is not None:
             dynamic = dynamic[:,switch.flatten(),:,:]
@@ -197,7 +204,10 @@ def prepare_data(batch, dynamic_channels, out_channels, transform_p, switch=None
         #target = F.pad(target, pad=pad_tuple)
         if is_static:
             input_batch = torch.cat([dynamic, static], dim=1)
-            input_batch = F.pad(input_batch, pad=pad_tuple)
+        else:
+            input_batch = dynamic
+
+        input_batch = F.pad(input_batch, pad=pad_tuple)
 
         return input_batch, target
 
@@ -213,13 +223,13 @@ def main():
     task = Task.init(project_name="t4c_eval", task_name="Chx tsx 7days")
     logger = task.get_logger()
     args = {
-        'task_id': 'd8afe4598ce54f3787e208112b4ae7df',
-        'batch_size': 8,
-        'num_workers': 2,
+        'task_id': 'd28f57e3a80944dca402d016ec3575fe',
+        'batch_size': 1,
+        'num_workers': 0,
         'pixel': (108, 69),
         'loader': 'val',
         'num_channels': 4,
-        'viz_dir': [0, 1, 2, 3],
+        'viz_dir': [0,1,2,3],
         'viz_idx': 0,
         'time_step': 0, #time step to plot
         'max_idx': 240
@@ -233,6 +243,7 @@ def main():
     cfg = train_task.get_configuration_object("OmegaConf")
     cfg = OmegaConf.create(cfg)
     print (cfg)
+    cfg.model.dataset.root_dir = "7days"
     # instantiate model
     try:
         root_dir = Dataset.get(dataset_project="t4c", dataset_name=cfg.model.dataset.root_dir).get_local_copy()
@@ -272,7 +283,6 @@ def main():
     trues = np.zeros((max_idx, d))
     preds = np.zeros((max_idx, d))
 
-
     mse=[]
     msenz=[]
     mse1=[]
@@ -294,7 +304,8 @@ def main():
     pixel_x, pixel_y = args['pixel']
     t = args['time_step']
 
-    hack_map = [1, 2, 3, 0]
+
+    #hack_map = [1, 2, 3, 0]
     if is_perm == False:
         for idx, i in (enumerate(loader)):
             inp, true = prepare_data(i, cfg.model.network.in_channels,
@@ -304,6 +315,7 @@ def main():
 
             pred = unstack_on_time(pred, d, num_channels=d,
                                        crop = tuple(cfg.train.transform.pad_tuple))
+            true = (true+dynamic_input_mean)*dynamic_input_std
             true = torch.moveaxis(true, 2, 4)
 
             # pred1 = pred[:,0,:,:,0]
@@ -323,7 +335,7 @@ def main():
 
 
             pred = np.clip(pred, 0, 255)
-            print(mean_squared_error(pred.flatten(), true.flatten()))
+            #print (mean_squared_error(pred.flatten(), true.flatten()))
             mse.append(mean_squared_error(pred.flatten(), true.flatten()))
             #mse1.append(mean_squared_error(pred1.flatten(), true1.flatten()))
             #mse2.append(mean_squared_error(pred2.flatten(), true2.flatten()))
@@ -339,9 +351,12 @@ def main():
                 p_true = (true[:,t, pixel_x, pixel_y, :].numpy())
                 trues[idx*bs:idx*bs+bs] = p_true
                 preds[idx*bs:idx*bs+bs] = p_pred
-            # if len(args['viz_dir']) != 0:
-            #     if idx==args['viz_idx']:
-                    # plot_tmaps(true[0].numpy(), pred[0].numpy(), args['viz_dir'], logger)
+            if len(args['viz_dir']) != 0:
+                # with open('data/interim/'+str(cfg.model.dataset.time_step)+"true_5avg.npy", 'wb') as f: np.save(f, true[0])
+                # with open('data/interim/'+str(cfg.model.dataset.time_step)+"pred_5avg.npy", 'wb') as f: np.save(f, pred[0])
+                # return
+                if idx==args['viz_idx']:
+                    plot_tmaps(true[0].numpy(), pred[0].numpy(), args['viz_dir'], logger)
             #msenz.append(mse_func(pred.flatten(), true.flatten(), nonzero))
             #trues.extend(p_true)
             #preds.extend(p_pred)
@@ -374,7 +389,7 @@ def main():
 
                 #print (F.mse_loss(pred[:,:,:,:,0], true[:,:,:,:,directions]))
                 pred_comb[:, :, :, :,directions] = pred[:,:,:,:,0]#pred.numpy()
-                true_comb[:, :, :, :,directions] = true[:,:,:,:,hack_map[directions]]#outp.numpy()
+                true_comb[:, :, :, :,directions] = true[:,:,:,:,directions]#outp.numpy()
 
                 if is_waveTransform:
                     _,_,rh,rw = pred.shape
@@ -394,9 +409,9 @@ def main():
                 #pred2 = pred_comb[:,5,:,:,1]
                 #true2 = true_comb[:,5,:,:,1]
 
+                #print(mean_squared_error(pred_comb.flatten(), true_comb.flatten()))
                 mse.append(mean_squared_error(pred_comb.flatten(), true_comb.flatten()))
                 #mse2.append(mean_squared_error(pred2.flatten(), true2.flatten()))
-                print (mse)
 
             except:
                 print ("Failed in mse calc!")

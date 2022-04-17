@@ -229,24 +229,26 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
     scaler = cfg.train.scaler
     pad_tuple = tuple(cfg.train.transform.pad_tuple)
 
-    dynamic_input_mean = np.load('data/processed/dynamic_input_mean.npy')
-    dynamic_input_std = np.load('data/processed/dynamic_input_std.npy')
+    # dynamic_input_mean = np.load('data/processed/dynamic_input_mean.npy')
+    # dynamic_input_std = np.load('data/processed/dynamic_input_std.npy')
 
-    dynamic_input_mean = torch.from_numpy(dynamic_input_mean)[None, None, :, None, None].float().cuda()
-    dynamic_input_std = torch.from_numpy(dynamic_input_std)[None, None, :, None, None].float().cuda()
+    # dynamic_input_mean = torch.from_numpy(dynamic_input_mean)[None, None, :, None, None].float().cuda()
+    # dynamic_input_std = torch.from_numpy(dynamic_input_std)[None, None, :, None, None].float().cuda()
 
     def prepare_batch_fn(batch, device, non_blocking):
         dynamic, static, target  = batch
         dynamic = convert_tensor(dynamic, device, non_blocking)
         target = convert_tensor(target, device, non_blocking)
-        dynamic = (dynamic - dynamic_input_mean) / dynamic_input_std
+        #dynamic = (dynamic - dynamic_input_mean) / dynamic_input_std
         dynamic = dynamic.reshape(-1, dynamic_channels, in_h, in_w)
         target = target.reshape(-1, out_channels, in_h, in_w)
         target = F.pad(target, pad=pad_tuple)
         static = convert_tensor(static, device, non_blocking)
         if is_static:
             input_batch = torch.cat([dynamic, static], dim=1)
-            input_batch = F.pad(input_batch, pad=pad_tuple)
+        else:
+            input_batch = dynamic
+        input_batch = F.pad(input_batch, pad=pad_tuple)
 
         return input_batch, target
 
