@@ -50,11 +50,11 @@ perm = np.array([[0,1,2,3,4,5,6,7],
         [4,5,6,7,0,1,2,3],
         [6,7,0,1,2,3,4,5]
         ])
-# dynamic_input_mean = np.load('data/processed/dynamic_input_mean.npy')
-# dynamic_input_std = np.load('data/processed/dynamic_input_std.npy')
+dynamic_input_mean = np.load('data/processed/dynamic_input_mean.npy')
+dynamic_input_std = np.load('data/processed/dynamic_input_std.npy')
 
-# dynamic_input_mean = torch.from_numpy(dynamic_input_mean)[None, None, :, None, None].float()
-# dynamic_input_std = torch.from_numpy(dynamic_input_std)[None, None, :, None, None].float()
+dynamic_input_mean = torch.from_numpy(dynamic_input_mean)[None, None, :, None, None].float()
+dynamic_input_std = torch.from_numpy(dynamic_input_std)[None, None, :, None, None].float()
 
 
 def reset_seeds(seed):
@@ -178,7 +178,7 @@ def unstack_on_time(data: torch.Tensor, batch_dim:bool = False, num_channels=4, 
             bottom = height - bottom
             data = data[:, :,:, top:bottom, left:right]
 
-        #data = (data+dynamic_input_mean)*dynamic_input_std
+        data = (data+dynamic_input_mean)*dynamic_input_std
         # (k, 12, 8, 495, 436) -> (k, 12, 495, 436, 8)
         data = torch.moveaxis(data, 2, 4)
 
@@ -195,7 +195,7 @@ def prepare_data(batch, dynamic_channels, out_channels, transform_p, switch=None
         if is_static == True:
             dynamic_channels = dynamic_channels - 9
         dynamic, static, target  = batch
-        #dynamic = (dynamic - dynamic_input_mean) / dynamic_input_std
+        dynamic = (dynamic - dynamic_input_mean) / dynamic_input_std
         dynamic = dynamic.reshape(-1, dynamic_channels, in_h, in_w)
         if switch is not None:
             dynamic = dynamic[:,switch.flatten(),:,:]
@@ -208,6 +208,8 @@ def prepare_data(batch, dynamic_channels, out_channels, transform_p, switch=None
             input_batch = dynamic
 
         input_batch = F.pad(input_batch, pad=pad_tuple)
+
+        target = (target - dynamic_input_mean) / dynamic_input_std
 
         return input_batch, target
 
@@ -223,12 +225,12 @@ def main():
     task = Task.init(project_name="t4c_eval", task_name="Chx tsx 7days")
     logger = task.get_logger()
     args = {
-        'task_id': 'd28f57e3a80944dca402d016ec3575fe',
-        'batch_size': 1,
-        'num_workers': 0,
+        'task_id': '6be21100e2ee43bd98676025a39fc17b',
+        'batch_size': 8,
+        'num_workers': 2,
         'pixel': (108, 69),
         'loader': 'val',
-        'num_channels': 4,
+        'num_channels': 8,
         'viz_dir': [0,1,2,3],
         'viz_idx': 0,
         'time_step': 0, #time step to plot
