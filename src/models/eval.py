@@ -34,7 +34,6 @@ from src.data.dataset import T4CDataset, train_collate_fn
 
 import matplotlib.pyplot as plt
 from PIL import Image
-
 from sklearn.metrics import mean_squared_error
 
 from pytorch_wavelets import DWTForward, DWTInverse # (or import DWT, IDWT)
@@ -178,7 +177,7 @@ def unstack_on_time(data: torch.Tensor, batch_dim:bool = False, num_channels=4, 
             bottom = height - bottom
             data = data[:, :,:, top:bottom, left:right]
 
-        data = (data+dynamic_input_mean)*dynamic_input_std
+        #data = (data+dynamic_input_mean)*dynamic_input_std
         # (k, 12, 8, 495, 436) -> (k, 12, 495, 436, 8)
         data = torch.moveaxis(data, 2, 4)
 
@@ -195,7 +194,7 @@ def prepare_data(batch, dynamic_channels, out_channels, transform_p, switch=None
         if is_static == True:
             dynamic_channels = dynamic_channels - 9
         dynamic, static, target  = batch
-        dynamic = (dynamic - dynamic_input_mean) / dynamic_input_std
+        #dynamic = (dynamic - dynamic_input_mean) / dynamic_input_std
         dynamic = dynamic.reshape(-1, dynamic_channels, in_h, in_w)
         if switch is not None:
             dynamic = dynamic[:,switch.flatten(),:,:]
@@ -209,7 +208,7 @@ def prepare_data(batch, dynamic_channels, out_channels, transform_p, switch=None
 
         input_batch = F.pad(input_batch, pad=pad_tuple)
 
-        target = (target - dynamic_input_mean) / dynamic_input_std
+        #target = (target - dynamic_input_mean) / dynamic_input_std
 
         return input_batch, target
 
@@ -225,8 +224,8 @@ def main():
     task = Task.init(project_name="t4c_eval", task_name="Chx tsx 7days")
     logger = task.get_logger()
     args = {
-        'task_id': '6be21100e2ee43bd98676025a39fc17b',
-        'batch_size': 8,
+        'task_id': '60173c278e154ec581c57de79c1c896e',
+        'batch_size': 2,
         'num_workers': 2,
         'pixel': (108, 69),
         'loader': 'val',
@@ -245,7 +244,7 @@ def main():
     cfg = train_task.get_configuration_object("OmegaConf")
     cfg = OmegaConf.create(cfg)
     print (cfg)
-    cfg.model.dataset.root_dir = "7days"
+    #cfg.model.dataset.root_dir = "7days"
     # instantiate model
     try:
         root_dir = Dataset.get(dataset_project="t4c", dataset_name=cfg.model.dataset.root_dir).get_local_copy()
@@ -317,7 +316,7 @@ def main():
 
             pred = unstack_on_time(pred, d, num_channels=d,
                                        crop = tuple(cfg.train.transform.pad_tuple))
-            true = (true+dynamic_input_mean)*dynamic_input_std
+            #true = (true+dynamic_input_mean)*dynamic_input_std
             true = torch.moveaxis(true, 2, 4)
 
             # pred1 = pred[:,0,:,:,0]

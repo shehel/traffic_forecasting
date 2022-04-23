@@ -242,7 +242,7 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
         target = convert_tensor(target, device, non_blocking)
         #dynamic = (dynamic - dynamic_input_mean) / dynamic_input_std
         #pdb.set_trace()
-        target = dynamic[:, -1, 0:1, :, :] - target
+        #target = dynamic[:, 11:12, 0:1, :, :] - target
         dynamic = dynamic.reshape(-1, dynamic_channels, in_h, in_w)
         target = target.reshape(-1, out_channels, in_h, in_w)
         target = F.pad(target, pad=pad_tuple)
