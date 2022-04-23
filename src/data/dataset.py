@@ -96,11 +96,11 @@ class T4CDataset(Dataset):
 
         for city in static_list:
             self.static_dict[city.parts[-2]] = load_h5_file(city)
-        static_input = np.stack(list(self.static_dict.values()), axis=0)
-        static_input_mean = static_input.mean(axis=(0, 2, 3))[:, None, None]
-        static_input_std = static_input.std(axis=(0, 2, 3))[:, None, None]
-        for city in self.static_dict:
-            self.static_dict[city] = (self.static_dict[city] - static_input_mean) / static_input_std
+        # static_input = np.stack(list(self.static_dict.values()), axis=0)
+        # static_input_mean = static_input.mean(axis=(0, 2, 3))[:, None, None]
+        # static_input_std = static_input.std(axis=(0, 2, 3))[:, None, None]
+        # for city in self.static_dict:
+        #     self.static_dict[city] = (self.static_dict[city] - static_input_mean) / static_input_std
         self.file_list.sort()
         # for file in self.file_list:
         #     self.files.append(load_h5_file(file))

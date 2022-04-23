@@ -97,9 +97,10 @@ def run_model(
 
     #
     model = instantiate(cfg.model, dataset={"root_dir":root_dir})
-    pytorch_total_params = sum(p.numel() for p in model.network.parameters() if p.requires_grad)
-    print (pytorch_total_params)
-    return
+    # pytorch_total_params = sum(p.numel() for p in model.network.parameters() if p.requires_grad)
+    # print (pytorch_total_params)
+    # r
+    #eturn
     assert len(model.t_dataset) > 0
 
     # TODO Model restricted to unet.
@@ -240,6 +241,8 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
         dynamic = convert_tensor(dynamic, device, non_blocking)
         target = convert_tensor(target, device, non_blocking)
         #dynamic = (dynamic - dynamic_input_mean) / dynamic_input_std
+        #pdb.set_trace()
+        target = dynamic[:, -1, 0:1, :, :] - target
         dynamic = dynamic.reshape(-1, dynamic_channels, in_h, in_w)
         target = target.reshape(-1, out_channels, in_h, in_w)
         target = F.pad(target, pad=pad_tuple)
