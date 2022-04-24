@@ -49,11 +49,11 @@ perm = np.array([[0,1,2,3,4,5,6,7],
         [4,5,6,7,0,1,2,3],
         [6,7,0,1,2,3,4,5]
         ])
-dynamic_input_mean = np.load('data/processed/dynamic_input_mean.npy')
-dynamic_input_std = np.load('data/processed/dynamic_input_std.npy')
+# dynamic_input_mean = np.load('data/processed/dynamic_input_mean.npy')
+# dynamic_input_std = np.load('data/processed/dynamic_input_std.npy')
 
-dynamic_input_mean = torch.from_numpy(dynamic_input_mean)[None, None, :, None, None].float()
-dynamic_input_std = torch.from_numpy(dynamic_input_std)[None, None, :, None, None].float()
+# dynamic_input_mean = torch.from_numpy(dynamic_input_mean)[None, None, :, None, None].float()
+# dynamic_input_std = torch.from_numpy(dynamic_input_std)[None, None, :, None, None].float()
 
 
 def reset_seeds(seed):
@@ -224,12 +224,12 @@ def main():
     task = Task.init(project_name="t4c_eval", task_name="Chx tsx 7days")
     logger = task.get_logger()
     args = {
-        'task_id': '60173c278e154ec581c57de79c1c896e',
-        'batch_size': 2,
+        'task_id': '7a8a35667f8a49959e9da4672509bbec',
+        'batch_size': 8,
         'num_workers': 2,
         'pixel': (108, 69),
         'loader': 'val',
-        'num_channels': 8,
+        'num_channels': 4,
         'viz_dir': [0,1,2,3],
         'viz_idx': 0,
         'time_step': 0, #time step to plot
@@ -402,6 +402,10 @@ def main():
                     Yl = true[:, :24,:,:]
                     Yh = [true[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
                     true = ifm((Yl, Yh))
+            chk = i[0][:,11:12, 0::2, :,:]
+            chk = torch.moveaxis(chk, 2, 4)
+            pred_comb = chk.numpy() + pred_comb
+
             pred_comb = np.clip(pred_comb, 0, 255)
             try:
                 # timestep slice
@@ -411,7 +415,10 @@ def main():
                 #true2 = true_comb[:,5,:,:,1]
 
                 #print(mean_squared_error(pred_comb.flatten(), true_comb.flatten()))
-                mse.append(mean_squared_error(pred_comb.flatten(), true_comb.flatten()))
+
+                #pdb.set_trace()
+                mse.append(mean_squared_error(pred_comb.flatten(), (true_comb).flatten()))
+                print (mse)
                 #mse2.append(mean_squared_error(pred2.flatten(), true2.flatten()))
 
             except:
