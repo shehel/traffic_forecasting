@@ -194,6 +194,7 @@ def prepare_data(batch, dynamic_channels, out_channels, transform_p, switch=None
         if is_static == True:
             dynamic_channels = dynamic_channels - 9
         dynamic, static, target  = batch
+        target = dynamic[:, 11:12, switch[0][0]:switch[0][0]+1, :, :] - target
         #dynamic = (dynamic - dynamic_input_mean) / dynamic_input_std
         dynamic = dynamic.reshape(-1, dynamic_channels, in_h, in_w)
         if switch is not None:
@@ -225,9 +226,9 @@ def main():
     logger = task.get_logger()
     args = {
         'task_id': '7a8a35667f8a49959e9da4672509bbec',
-        'batch_size': 8,
+        'batch_size': 1,
         'num_workers': 2,
-        'pixel': (108, 69),
+        'pixel': (108, 69),#(221, 192),
         'loader': 'val',
         'num_channels': 4,
         'viz_dir': [0,1,2,3],
@@ -374,12 +375,14 @@ def main():
         pred_comb = np.zeros((bs, time_steps, h, w, d))
         true_comb = np.zeros((bs, time_steps, h, w, d))
         for idx, i in (enumerate(loader)):
+
             for directions in range(4):
                 switch = perm[directions]
                 for c in range(1,12): switch = np.vstack([switch, perm[directions]+(8*c)])
                 inp, true = prepare_data(i, cfg.model.network.in_channels,
                                       cfg.model.network.out_channels, cfg.train.transform, switch)
                 true = torch.moveaxis(true, 2, 4)
+
 
                 pred = network(inp.to('cuda'))
                 pred = pred.cpu().detach()#.numpy()
@@ -402,9 +405,11 @@ def main():
                     Yl = true[:, :24,:,:]
                     Yh = [true[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
                     true = ifm((Yl, Yh))
+
             chk = i[0][:,11:12, 0::2, :,:]
             chk = torch.moveaxis(chk, 2, 4)
             pred_comb = chk.numpy() + pred_comb
+            true_comb = chk.numpy() + true_comb
 
             pred_comb = np.clip(pred_comb, 0, 255)
             try:
@@ -418,19 +423,20 @@ def main():
 
                 #pdb.set_trace()
                 mse.append(mean_squared_error(pred_comb.flatten(), (true_comb).flatten()))
-                print (mse)
+                #print (mse)
                 #mse2.append(mean_squared_error(pred2.flatten(), true2.flatten()))
 
             except:
                 print ("Failed in mse calc!")
 
             if idx == args['viz_idx']:
-                plot_tmaps(true_comb[0], pred_comb[0], args['viz_dir'], logger)
+                #plot_tmaps(true_comb[0], pred_comb[0], args['viz_dir'], logger)
+                continue
             # mse1.append(mean_squared_error(pred1.flatten(), true1.flatten()))
             # mse2.append(mean_squared_error(pred2.flatten(), true2.flatten()))
 
             if idx>=max_idx/bs:
-                continue
+                break
             else:
             #     if is_waveTransform:
             #         true = unstack_on_time(true[:,:,:-1,:], d)

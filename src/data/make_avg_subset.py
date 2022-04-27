@@ -6,6 +6,7 @@ import glob
 import random
 import os
 import shutil
+import tqdm
 
 from clearml import Dataset
 from clearml import Task
@@ -28,7 +29,8 @@ def main() -> None:
 
     args = {
         'task_id': '53ec3f01cb1e4385bf0e441551af0452',
-        'name': '5avg7days',
+        'name': '12avg7days',
+        'avg': 12,
     }
 
     task.connect(args)
@@ -43,7 +45,6 @@ def main() -> None:
     random.seed(cfg.random_seed)
     # uses the name of the yaml file aos dataset folder name
     try:
-        print (abssdf)
         Dataset.get(dataset_project="t4c", dataset_name=args['name'])
         logger.info('Dataset exists. Skipping dataset creation.')
     except:
@@ -56,31 +57,31 @@ def main() -> None:
             logger.info('Folder exists. Fatal error, exiting!')
             # return
 
-        avg_term = 5
+        avg_term = args['avg']
 
         # loop through the cities and select the required number of samples
         # for train set and val set. Note that cities appearing in both train and
         # val set is not supported (no guarantees on duplicates)
 
-        # for city in cfg.train_set.cities:
-        #     files = []
-        #     logger.info('Opening %s files for training set processing', city)
+        for city in cfg.train_set.cities:
+            files = []
+            logger.info('Opening %s files for training set processing', city)
 
-        #     if not os.path.exists(output_path/city/'training'):
-        #         os.makedirs(output_path/city/'training')
-        #     for file in glob.glob(str(input_path/city/'training'/'*')):
-        #         files.append(file)
+            if not os.path.exists(output_path/city/'training'):
+                os.makedirs(output_path/city/'training')
+            for file in glob.glob(str(input_path/city/'training'/'*')):
+                files.append(file)
 
-        #     for file in files:
-        #         day_data = load_h5_file(file)
+            for file in tqdm.tqdm(files):
+                day_data = load_h5_file(file)
 
-        #         day_data = bn.move_mean(day_data, avg_term, axis=0).astype(np.uint8)
-        #         day_data = day_data[(avg_term-1):,:,:,:]
-        #         write_data_to_h5(day_data,output_path/city/'training'/Path(file).name)
-        #     res_file = city+"_map_high_res.h5"
-        #     static_file = city+"_static.h5"
-        #     shutil.copy(input_path/city/static_file, output_path/city/static_file)
-        #     shutil.copy(input_path/city/res_file, output_path/city/res_file)
+                day_data = bn.move_mean(day_data, avg_term, axis=0).astype(np.uint8)
+                day_data = day_data[(avg_term-1):,:,:,:]
+                write_data_to_h5(day_data,output_path/city/'training'/Path(file).name)
+            res_file = city+"_map_high_res.h5"
+            static_file = city+"_static.h5"
+            shutil.copy(input_path/city/static_file, output_path/city/static_file)
+            shutil.copy(input_path/city/res_file, output_path/city/res_file)
 
         # val set
 
