@@ -129,6 +129,16 @@ def plot_tmaps(true, pred, viz_dir, logger):
         logger.current_logger().report_media(
                 "viz", "pred frames", iteration=dir, stream=get_ani(pred[:,:,:,dir]), file_extension='html')
 
+class NaiveAverage(torch.nn.Module):  # noqa
+    def __init__(self):
+        """Returns prediction consisting of repeating last frame."""
+        super(NaiveAverage, self).__init__()
+
+    def forward(self, x: torch.Tensor, *args, **kwargs):
+        x = torch.mean(x, dim=1)
+        x = torch.unsqueeze(x, dim=1)
+        x = torch.repeat_interleave(x, repeats=6, dim=1)
+        return x
 
 def plot_dims(logger, true_series, pred_series, dim=8):
 
@@ -222,15 +232,15 @@ Information include
 """
 def main():
     reset_seeds(123)
-    task = Task.init(project_name="t4c_eval", task_name="Chx tsx 7days")
+    task = Task.init(project_name="t4c_eval", task_name="Eval avg")
     logger = task.get_logger()
     args = {
-        'task_id': '7a8a35667f8a49959e9da4672509bbec',
-        'batch_size': 1,
+        'task_id': 'fb40f8c008b04d5cbe10655a6ffe151e',
+        'batch_size': 4,
         'num_workers': 2,
         'pixel': (108, 69),#(221, 192),
         'loader': 'val',
-        'num_channels': 4,
+        'num_channels': 8,
         'viz_dir': [0,1,2,3],
         'viz_idx': 0,
         'time_step': 0, #time step to plot
@@ -245,7 +255,7 @@ def main():
     cfg = train_task.get_configuration_object("OmegaConf")
     cfg = OmegaConf.create(cfg)
     print (cfg)
-    #cfg.model.dataset.root_dir = "7days"
+    cfg.model.dataset.root_dir = "7days"
     # instantiate model
     try:
         root_dir = Dataset.get(dataset_project="t4c", dataset_name=cfg.model.dataset.root_dir).get_local_copy()
@@ -306,24 +316,27 @@ def main():
     pixel_x, pixel_y = args['pixel']
     t = args['time_step']
 
-
+    m = NaiveAverage()
     #hack_map = [1, 2, 3, 0]
     if is_perm == False:
         for idx, i in (enumerate(loader)):
-            inp, true = prepare_data(i, cfg.model.network.in_channels,
-                                      cfg.model.network.out_channels, cfg.train.transform)
-            pred = network(inp.to("cuda"))
-            pred = pred.cpu().detach()#.numpy()
+            #inp, true = prepare_data(i, cfg.model.network.in_channels,
+            #                          cfg.model.network.out_channels, cfg.train.transform)
+            #pred = network(inp.to("cuda"))
+            #pred = pred.cpu().detach()#.numpy()
 
-            pred = unstack_on_time(pred, d, num_channels=d,
-                                       crop = tuple(cfg.train.transform.pad_tuple))
+            #pred = unstack_on_time(pred, d, num_channels=d,
+            #                           crop = tuple(cfg.train.transform.pad_tuple))
             #true = (true+dynamic_input_mean)*dynamic_input_std
+            pred = m.forward(i[0])
+            true = i[2]
+            pred = torch.moveaxis(pred, 2, 4)
             true = torch.moveaxis(true, 2, 4)
 
-            # pred1 = pred[:,0,:,:,0]
-            # true1 = true[:,0,:,:,0]
-            # pred2 = pred[:,5,:,:,0]
-            # true2 = true[:,5,:,:,0]
+            pred1 = pred[:,:,:,:,0::2]
+            true1 = true[:,:,:,:,0::2]
+            pred2 = pred[:,:,:,:,1::2]
+            true2 = true[:,:,:,:,1::2]
             if is_waveTransform:
                 _,_,rh,rw = pred.shape
                 Yl = pred[:, :24,:,:]
@@ -339,8 +352,8 @@ def main():
             pred = np.clip(pred, 0, 255)
             #print (mean_squared_error(pred.flatten(), true.flatten()))
             mse.append(mean_squared_error(pred.flatten(), true.flatten()))
-            #mse1.append(mean_squared_error(pred1.flatten(), true1.flatten()))
-            #mse2.append(mean_squared_error(pred2.flatten(), true2.flatten()))
+            mse1.append(mean_squared_error(pred1.flatten(), true1.flatten()))
+            mse2.append(mean_squared_error(pred2.flatten(), true2.flatten()))
 
             if idx>=max_idx/bs:
                 continue
@@ -455,8 +468,8 @@ def main():
 
     print (mse)
     print("Overall MSE: {}".format(sum(mse)/len(mse)))
-    #print("MSE ts 0 ch2/8: {}".format(sum(mse1)/len(mse1)))
-    #print("MSE ts 5 ch2/8: {}".format(sum(mse2)/len(mse2)))
+    print("MSE vol: {}".format(sum(mse1)/len(mse1)))
+    print("MSE speed: {}".format(sum(mse2)/len(mse2)))
     plot_dims(logger, trues, preds, d)
 if __name__ == "__main__":
     main()

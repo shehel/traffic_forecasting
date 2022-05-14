@@ -63,6 +63,8 @@ from clearml import Dataset
 
 import ignite.distributed as idist
 
+from src.models.naverage import NaiveAverage
+
 def reset_seeds(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -230,6 +232,8 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
     scaler = cfg.train.scaler
     pad_tuple = tuple(cfg.train.transform.pad_tuple)
 
+    average_model = NaiveAverage()
+
     # dynamic_input_mean = np.load('data/processed/dynamic_input_mean.npy')
     # dynamic_input_std = np.load('data/processed/dynamic_input_std.npy')
 
@@ -240,18 +244,23 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
         dynamic, static, target  = batch
         dynamic = convert_tensor(dynamic, device, non_blocking)
         target = convert_tensor(target, device, non_blocking)
+
         #dynamic = (dynamic - dynamic_input_mean) / dynamic_input_std
-        pdb.set_trace()
-        target = dynamic[:, 11:12, 0:1, :, :] - target
+        #
+        #target = dynamic[:, 11:12, 0:1, :, :] - target
+        pred = average_model.forward(dynamic)
         dynamic = dynamic.reshape(-1, dynamic_channels, in_h, in_w)
+        target = target - pred
         target = target.reshape(-1, out_channels, in_h, in_w)
         target = F.pad(target, pad=pad_tuple)
         static = convert_tensor(static, device, non_blocking)
+
         if is_static:
             input_batch = torch.cat([dynamic, static], dim=1)
         else:
             input_batch = dynamic
         input_batch = F.pad(input_batch, pad=pad_tuple)
+        pdb.set_trace()
 
         return input_batch, target
 
