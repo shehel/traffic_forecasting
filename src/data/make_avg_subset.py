@@ -29,8 +29,8 @@ def main() -> None:
 
     args = {
         'task_id': '53ec3f01cb1e4385bf0e441551af0452',
-        'name': '12avg7days',
-        'avg': 12,
+        'name': '8avg7days',
+        'avg': 8,
     }
 
     task.connect(args)

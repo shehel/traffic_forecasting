@@ -4,7 +4,7 @@ val_fraction: 0
 resume_checkpoint:
 epochs: 30
 parallel_backend: "nccl"
-n_process: 2
+n_process: 4
 amp_mode: amp
 scaler: true
 optimizer:
