@@ -197,7 +197,7 @@ def main() -> None:
     logger = logging.getLogger(__name__)
     args = {
         "random_seed": 123,
-        "name": "feat_7days_v20_mp",
+        "name": "feat_7days_v23_mp",
         "desc": 'baseline',
         "ds_name": "7days",
         "input_path": "/home/shehel/ml/NeurIPS2021-traffic4cast/data/raw",
@@ -212,7 +212,7 @@ def main() -> None:
             "MOSCOW",
         ],
         "count": 7,
-        "filters": [0],
+        "filters": [0, 5, 7, 21, 51, 71],
         "static_filter": None,
         "slices_per_day": 40,
         "pixels_per_slice": 128,
@@ -317,9 +317,9 @@ def main() -> None:
 
                         # Normalize by removing
                         # mean of inputs from input and output
-                        mean = np.mean(dynamic_input, 0)
-                        output_data = output_data - mean
-                        dynamic_input = dynamic_input - mean
+                        # mean = np.mean(dynamic_input, 0)
+                        # output_data = output_data - mean
+                        # dynamic_input = dynamic_input - mean
 
                         dynamic_input = np.pad(
                                 dynamic_input,
