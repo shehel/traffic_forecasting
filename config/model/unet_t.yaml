@@ -1,0 +1,32 @@
+_target_: src.models.model.Model
+network:
+    _target_: src.models.unet_t.UNet
+    dim: 12
+    in_channels: 105 # 12*8+9
+    out_channels: 1 # 6*8
+    depth: 2
+    wf: 6
+    padding: True
+    up_mode: 'upconv'
+    batch_norm: True
+
+dataset:
+  _target_: src.data.dataset_t.T4CDataset
+  root_dir: "7days"
+  limit:
+  use_npy: False
+  sampling_height: 1
+  sampling_width: 1
+  dim_start: 0
+  dim_step: 1
+  output_start: 1
+  output_step: 2
+  reduced: False
+  single_channel:
+  time_step: 0
+  perm: True
+
+
+valset: True
+valset_limit:
+val_filter: "**/validation/*8ch.h5"
