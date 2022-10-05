@@ -1,10 +1,10 @@
 random_seed: 123
 train_fraction: 1
 val_fraction: 0
-resume_checkpoint:
+resume_checkpoint: #ae73c90a9df34ff3a911e13f0d05cff9
 epochs: 3
-parallel_backend: "nccl"
-n_process: 1
+parallel_backend: #"nccl"
+n_process:
 amp_mode:
 scaler:
 optimizer:
@@ -13,8 +13,8 @@ optimizer:
 dataloader:
   shuffle: True
   batch_size: 2
-  num_workers: 1
-  train_eval: 50
+  num_workers: 0
+  train_eval: 10
 transform:
   in_h: 495
   in_w: 436

@@ -1,0 +1,20 @@
+random_seed: 123
+name: feat_7days
+ds_name: 7days
+input_path: /home/shehel/ml/NeurIPS2021-traffic4cast/data/raw
+
+cities:
+- ANTWERP
+- BANGKOK
+- BARCELONA
+- BERLIN
+- CHICAGO
+- ISTANBUL
+- MELBOURNE
+- MOSCOW
+count: 7
+
+filters: [3, 7, 21, 51, 71, 91]
+static_filter:
+patch_start: 128
+patch_step: 128

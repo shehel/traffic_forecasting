@@ -1,7 +1,9 @@
 #  Copyright 2021 Institute of Advanced Research in Artificial Intelligence (IARAI) GmbH.
 #  IARAI licenses this file to You under the Apache License, Version 2.0
 #  (the "License"); you may not use this file except in compliance with
-#  the License. You may obtain a copy of the License at
+#  * TODO the
+#  **
+#  License MInvestigate diff model. Why is it giving the results its giving?eeting. You may obtain a copy of the License at
 #
 #  http://www.apache.org/licenses/LICENSE-2.0
 #  Unless required by applicable law or agreed to in writing, software
@@ -19,6 +21,9 @@ import tqdm
 from pathlib import Path
 from typing import Optional
 import pdb
+
+from functools import partial
+import copy
 
 import numpy as np
 import torch
@@ -43,10 +48,9 @@ from ignite.contrib.engines.common import save_best_model_by_val_score
 
 from torch.utils.data import DataLoader
 from torch.utils.data import SubsetRandomSampler
-
 from src.models.checkpointing import load_torch_model_from_checkpoint
 from src.models.checkpointing import save_torch_model_to_checkpoint
-from src.data.dataset_fact import T4CDataset, train_collate_fn
+from src.data.dataset import T4CDataset, train_collate_fn
 
 import pdb
 
@@ -63,21 +67,28 @@ from clearml import Dataset
 
 import ignite.distributed as idist
 
+from src.models.naverage import NaiveAverage
+from einops import rearrange
+
 def reset_seeds(seed):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    #torch.backends.cudnn.deterministic = True
+    #torch.backends.cudnn.benchmark = False
     os.environ['PYTHONHASHSEED'] = str(seed)
 
 
 def run_model(
         rank: int,
         task: Task,
+        root_dir: str,
         cfg: DictConfig,
     ):  # noqa
+
+    rng = np.random.default_rng()
+    t4c_apply_basic_logging_config()
     logging.info(
         idist.get_rank(),
         ": ",
@@ -91,29 +102,29 @@ def run_model(
     logging.info(f"Using device {device}")
     # Fetch dataset if it exists in clearml server, otherwise
     # assume config contains path and try local dir
-    try:
-        root_dir = Dataset.get(dataset_project="t4c", dataset_name=cfg.model.dataset.root_dir).get_local_copy()
-    except:
-        root_dir = cfg.model.dataset.root_dir
-        logging.info(f"Could not find dataset in clearml server. Using {root_dir} as path.")
 
     #
+    model = instantiate(cfg.model, dataset={"root_dir":root_dir})
+    # pytorch_total_params = sum(p.numel() for p in model.network.parameters() if p.requires_grad)
+    # print (pytorch_total_params)
+    # r
+    #eturn
+    assert len(model.t_dataset) > 0
+
     # TODO Model restricted to unet.
+    if cfg.train.resume_checkpoint is not None:
+        logging.info("Reload checkpoint %s", cfg.train.resume_checkpoint)
+        #load_torch_model_from_checkpoint(checkpoint=cfg.train.resume_checkpoint, model=model.network)
+        to_load = {"train_model": model.network}
+        checkpoint = torch.load(cfg.train.resume_checkpoint)
+        #Checkpoint.load_objects(to_load, checkpoint, map_location=torch.device('cuda'))
+        model.network.load_state_dict(checkpoint['train_model'].module.state_dict())
+        # TODO
+        #optimizer.load_state_dict(checkpoint['optimizer'].state_dict())
+
             # https://stackoverflow.com/questions/59249563/runtimeerror-module-must-have-its-parameters-and-buffers-on-device-cuda1-devi
 
-    model = instantiate(cfg.model, dataset={"root_dir":root_dir})
-    if cfg.train.resume_checkpoint is not None:
-        chkpt_task = Task.get_task(task_id=cfg.train.resume_checkpoint)
-        logging.info("Reload checkpoint %s", cfg.train.resume_checkpoint)
 
-        model_path = chkpt_task.artifacts["model_checkpoint"].get_local_copy()
-        model_state_dict = torch.load(
-            model_path + "/" + os.listdir(model_path)[0]
-        )  # ,map_location=torch.device('cpu'))
-        model.network.load_state_dict(model_state_dict["train_model"])
-        #pdb.set_trace()
-
-    assert len(model.t_dataset) > 0
     model.network = idist.auto_model(model.network)
 
     optimizer = idist.auto_optim(optim.Adam(model.network.parameters(), lr = cfg.train.optimizer.lr))
@@ -148,7 +159,7 @@ def run_model(
         val_indices = list(range(full_dataset_size_val))
         np.random.shuffle(val_indices)
 
-    np.random.shuffle(indices)
+    rng.shuffle(indices)
 
     assert np.isclose(cfg.train.train_fraction + cfg.train.val_fraction, 1.0)
     num_train_items = max(int(np.floor(cfg.train.train_fraction * effective_dataset_size)),
@@ -174,7 +185,7 @@ def run_model(
 
     train_loader = idist.auto_dataloader(model.t_dataset, batch_size=cfg.train.dataloader.batch_size,
                                          num_workers=cfg.train.dataloader.num_workers,
-                              sampler=train_sampler, collate_fn=train_collate_fn, pin_memory=True, drop_last=True)
+                              sampler=train_sampler, collate_fn=train_collate_fn, pin_memory=False, drop_last=True)
 
 
     # Needed as train evaluator uses the entire training set for
@@ -185,16 +196,16 @@ def run_model(
         train_eval_sampler = SubsetRandomSampler(indices[:cfg.train.dataloader.train_eval])
         train_eval_loader = idist.auto_dataloader(model.t_dataset, batch_size=cfg.train.dataloader.batch_size,
                                                   num_workers=cfg.train.dataloader.num_workers,
-                              sampler=train_eval_sampler, collate_fn=train_collate_fn, pin_memory=True)
+                                                  sampler=train_eval_sampler, collate_fn=train_collate_fn, pin_memory=False)
     else:
         train_eval_loader = train_loader
 
     if cfg.model.valset:
         val_loader = idist.auto_dataloader(model.v_dataset, batch_size=cfg.train.dataloader.batch_size,
-                            num_workers=cfg.train.dataloader.num_workers, sampler=dev_sampler, collate_fn=train_collate_fn, pin_memory=True)
+                                           num_workers=cfg.train.dataloader.num_workers, sampler=dev_sampler, collate_fn=train_collate_fn, pin_memory=False)
     else:
         val_loader = idist.auto_dataloader(model.t_dataset, batch_size=cfg.train.dataloader.batch_size,
-                            num_workers=cfg.train.dataloader.num_workers, sampler=dev_sampler, collate_fn =train_collate_fn, pin_memory=True)
+                                           num_workers=cfg.train.dataloader.num_workers, sampler=dev_sampler, collate_fn =train_collate_fn, pin_memory=False)
 
         # Loss
     loss = F.mse_loss
@@ -203,20 +214,23 @@ def run_model(
     # logging.info(system_status())
 
     checkpoints_dir = os.path.join(os.path.curdir, "checkpoints")
+
     train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_loader, model.network, checkpoints_dir, cfg)
     logging.info("End training of train_model %s on %s for %s epochs", model.network, device, cfg.train.epochs)
 
-    # Upload checkpoint folder containing model with best val score
+    # Upload checkpoint folder con
     task.upload_artifact(name='model_checkpoint', artifact_object=checkpoints_dir)
 
 def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_loader,
                  train_model, checkpoints_dir, cfg):
     # Validator
     is_static = cfg.train.transform.static
+    if is_static:
+        dynamic_channels = cfg.model.network.in_channels - 9
+    else:
+        dynamic_channels = cfg.model.network.in_channels
 
-    dynamic_channels = cfg.model.network.dim
-
-    out_channels = cfg.model.network.out_dim
+    out_channels = cfg.model.network.out_channels
 
     in_h = cfg.train.transform.in_h
     in_w = cfg.train.transform.in_w
@@ -225,15 +239,27 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
     scaler = cfg.train.scaler
     pad_tuple = tuple(cfg.train.transform.pad_tuple)
 
+    #average_model = NaiveAverage()
+
+    # dynamic_input_mean = np.load('data/processed/dynamic_input_mean.npy')
+    # dynamic_input_std = np.load('data/processed/dynamic_input_std.npy')
+
+    # dynamic_input_mean = torch.from_numpy(dynamic_input_mean)[None, None, :, None, None].float().cuda()
+    # dynamic_input_std = torch.from_numpy(dynamic_input_std)[None, None, :, None, None].float().cuda()
 
     def prepare_batch_fn(batch, device, non_blocking):
         dynamic, target  = batch
         dynamic = convert_tensor(dynamic, device, non_blocking)
         target = convert_tensor(target, device, non_blocking)
-        target = F.pad(target, pad=pad_tuple)
-        input_batch = F.pad(dynamic, pad=pad_tuple)
 
-        return input_batch, target
+        #dynamic = (dynamic - dynamic_input_mean) / dynamic_input_std
+        #
+        #target = dynamic[:, 11:12, 0:1, :, :] - target
+        #pred = average_model.forward(dynamic)
+        #pdb.set_trace()
+        #target = dynamic[:, 11:12, 0:1, :, :] - target
+
+        return dynamic, target
 
     validation_evaluator = create_supervised_evaluator(train_model, metrics={"val_loss": Loss(loss), "neg_val_loss": Loss(loss)*-1}, device=device, amp_mode=amp_mode,
                                                        prepare_batch=prepare_batch_fn)
@@ -257,7 +283,7 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
         # logging.info(system_status()
 
     @trainer.on(Events.EPOCH_COMPLETED)  # noqa
-    @trainer.on(Events.EPOCH_STARTED)  # noqa
+    #@trainer.on(Events.EPOCH_STARTED)  # noqa
     def log_epoch_summary(engine: Engine):
         # Training
         train_evaluator.run(train_eval_loader)
@@ -309,11 +335,16 @@ def main(cfg: DictConfig):
     spawn_kwargs["nproc_per_node"] = cfg.train.n_process
     reset_seeds(cfg.train.random_seed)
     #sd = Dataset.get(dataset_project="t4c", dataset_name="default").get_mutable_local_copy("data/raw")
-    task = Task.init(project_name='t4c', task_name='train_model')
-    t4c_apply_basic_logging_config()
+    task = Task.init(project_name='t4c', task_name='train_ar')
+
+    try:
+        root_dir = Dataset.get(dataset_project="t4c", dataset_name=cfg.model.dataset.root_dir).get_local_copy()
+    except:
+        root_dir = cfg.model.dataset.root_dir
+        logging.info(f"Could not find dataset in clearml server. Using {root_dir} as path.")
 
     with idist.Parallel(backend=cfg.train.parallel_backend, **spawn_kwargs) as parallel:
-        parallel.run(run_model, task, cfg)
+        parallel.run(run_model, task, root_dir, cfg)
 
 
 

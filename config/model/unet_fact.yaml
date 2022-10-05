@@ -1,17 +1,11 @@
-
 _target_: src.models.model.Model
 network:
-    _target_: src.models.unet.UNet
-    in_channels: 105 # 12*8+9
-    out_channels: 6 # 6*8
-    depth: 2
-    wf: 6
-    padding: True
-    up_mode: 'upconv'
-    batch_norm: True
+    _target_: src.models.unet_fact.Unet3D
+    dim: 8 # 12*8+9
+    out_dim: 8 # 6*8
 
 dataset:
-  _target_: src.data.dataset.T4CDataset
+  _target_: src.data.dataset_fact.T4CDataset
   root_dir: "7daysv6"
   limit:
   use_npy: False
@@ -20,11 +14,11 @@ dataset:
   dim_start: 0
   dim_step: 1
   output_start: 0
-  output_step: 2
+  output_step: 1
   reduced: False
-  single_channel: 0
+  single_channel:
   time_step:
-  perm: True
+  perm: False
 
 valset: True
 valset_limit: 10
