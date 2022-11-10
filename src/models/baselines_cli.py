@@ -215,27 +215,28 @@ def run_model(
 
     checkpoints_dir = os.path.join(os.path.curdir, "checkpoints")
     #t_model = copy.deepcopy(model.network)
-    t_model = AR(96, 48)
+    #t_model = AR(96, 48)
 
     # load model to predict t+1
-    t_model = t_model.to('cuda')
-    train_task = Task.get_task(task_id="2b2cb5c3b6b54eb5b17c36a8f0ecc8e7")
-    model_path = train_task.artifacts['model_checkpoint'].get_local_copy()#"/data/t5chx.pt"
-    pdb.set_trace()
+    #t_model = t_model.to('cuda')
+    #train_task = Task.get_task(task_id="2b2cb5c3b6b54eb5b17c36a8f0ecc8e7")
+    #model_path = train_task.artifacts['model_checkpoint'].get_local_copy()#"/data/t5chx.pt"
+    #pdb.set_trace()
     #model_state_dict = torch.load(model_path)
-    model_state_dict = torch.load(model_path+'/'+os.listdir(model_path)[-1])#,map_location=torch.device('cpu'))
-    t_model.load_state_dict(model_state_dict['train_model'], strict=False)
-    t_model.eval()
+    #model_state_dict = torch.load(model_path+'/'+os.listdir(model_path)[-1])#,map_location=torch.device('cpu'))
+    #t_model.load_state_dict(model_state_dict['train_model'], strict=False)
+    #t_model.eval()
+    t_model = None
 
 
-    train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_loader, model.network, t_model, checkpoints_dir, cfg)
+    train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_loader, model.network, checkpoints_dir, cfg, t_model=None)
     logging.info("End training of train_model %s on %s for %s epochs", model.network, device, cfg.train.epochs)
 
     # Upload checkpoint folder con
     task.upload_artifact(name='model_checkpoint', artifact_object=checkpoints_dir)
 
 def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_loader,
-                 train_model, t_model, checkpoints_dir, cfg):
+                 train_model, checkpoints_dir, cfg, t_model=None):
     # Validator
     is_static = cfg.train.transform.static
     if is_static:
@@ -269,19 +270,19 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
         #
         #target = dynamic[:, 11:12, 0:1, :, :] - target
 
-        pred = t_model.forward(rearrange(dynamic, 'b c t h w -> (b h w) (c t)'))
-        pred = rearrange(pred, '(b h w) (c t) -> b c t h w')
-        pdb.set_trace()
-        target = target - pred
+        #@pred = t_model.forward(rearrange(dynamic, 'b c t h w -> (b h w) (c t)'))
+        #pred = rearrange(pred, '(b h w) (c t) -> b c t h w')
         #pdb.set_trace()
+        #target = target - pred
         #target = dynamic[:, 11:12, 0:1, :, :] - target
+
         dynamic = dynamic.reshape(-1, dynamic_channels, in_h, in_w)
         #target = target - pred
         target = target.reshape(-1, out_channels, in_h, in_w)
         target = F.pad(target, pad=pad_tuple)
-        static = convert_tensor(static, device, non_blocking)
 
         if is_static:
+            static = convert_tensor(static, device, non_blocking)
             input_batch = torch.cat([dynamic, static], dim=1)
         else:
             input_batch = dynamic
