@@ -3,13 +3,12 @@ import binascii
 import logging
 import os
 import random
-#os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 import sys
 from pathlib import Path
 from typing import Optional
 import pdb
 
-import copy
 import numpy as np
 import torch
 import torch.nn.functional as F  # noqa
@@ -130,16 +129,6 @@ def plot_tmaps(true, pred, viz_dir, logger):
         logger.current_logger().report_media(
                 "viz", "pred frames", iteration=dir, stream=get_ani(pred[:,:,:,dir]), file_extension='html')
 
-class NaiveAverage(torch.nn.Module):  # noqa
-    def __init__(self):
-        """Returns prediction consisting of repeating last frame."""
-        super(NaiveAverage, self).__init__()
-
-    def forward(self, x: torch.Tensor, *args, **kwargs):
-        x = torch.mean(x, dim=1)
-        x = torch.unsqueeze(x, dim=1)
-        x = torch.repeat_interleave(x, repeats=6, dim=1)
-        return x
 
 def plot_dims(logger, true_series, pred_series, dim=8):
 
@@ -197,7 +186,6 @@ def unstack_on_time(data: torch.Tensor, batch_dim:bool = False, num_channels=4, 
             data = torch.squeeze(data, 0)
         return data
 
-average_model = NaiveAverage()
 def prepare_data(batch, dynamic_channels, out_channels, transform_p, switch=None):
         in_h = transform_p['in_h']
         in_w = transform_p['in_w']
@@ -206,14 +194,7 @@ def prepare_data(batch, dynamic_channels, out_channels, transform_p, switch=None
         if is_static == True:
             dynamic_channels = dynamic_channels - 9
         dynamic, static, target  = batch
-        #target = dynamic[:, 11:12, switch[0][0]:switch[0][0]+1, :, :] - target
         #dynamic = (dynamic - dynamic_input_mean) / dynamic_input_std
-
-        #post_d = dynamic.clone()
-        #post_d[:, :10, 0, :, :] = dynamic[:, 1:11, 0, :, :]
-
-        pred = average_model.forward(dynamic)
-        target = target - pred
         dynamic = dynamic.reshape(-1, dynamic_channels, in_h, in_w)
         if switch is not None:
             dynamic = dynamic[:,switch.flatten(),:,:]
@@ -227,27 +208,9 @@ def prepare_data(batch, dynamic_channels, out_channels, transform_p, switch=None
 
         input_batch = F.pad(input_batch, pad=pad_tuple)
 
-        # pred = t_model(input_batch.to("cuda"))
-        # height, width = pred.shape[-2], pred.shape[-1]
-        # left, right, top, bottom = pad_tuple
-        # right = width - right
-        # bottom = height - bottom
-        # pred = pred[:, :, top:bottom, left:right]
-
-        # pred = pred.reshape(-1, 1, 1, 495, 436)
-        #pdb.set_trace()
-        #post_d[:,-1,0, :,:] = pred[:,0,0,:,:]
-
-        #dynamic = post_d.reshape(-1, dynamic_channels, in_h, in_w)
-        #if is_static:
-        #    input_batch = torch.cat([dynamic, static], dim=1)
-        #else:
-        #    input_batch = dynamic
-        #input_batch = F.pad(input_batch, pad=pad_tuple)
-
         #target = (target - dynamic_input_mean) / dynamic_input_std
 
-        return input_batch, target, pred
+        return input_batch, target
 
 """
 Provides evaluation information for a given model and dataset.
@@ -258,10 +221,10 @@ Information include
 """
 def main():
     reset_seeds(123)
-    task = Task.init(project_name="t4c_eval", task_name="Eval avg")
+    task = Task.init(project_name="t4c_eval", task_name="Chx tsx 7days")
     logger = task.get_logger()
     args = {
-        'task_id': '9081991cf163414294aa6f1005986b63',
+        'task_id': '0e0d79793edd49fdacef0afb47511fb5',
         'batch_size': 2,
         'num_workers': 2,
         'pixel': (108, 69),#(221, 192),
@@ -282,6 +245,7 @@ def main():
     cfg = OmegaConf.create(cfg)
     print (cfg)
     cfg.model.dataset.root_dir = "7days"
+    cfg.model.valset_limit = None
     # instantiate model
     try:
         root_dir = Dataset.get(dataset_project="t4c", dataset_name=cfg.model.dataset.root_dir).get_local_copy()
@@ -297,27 +261,12 @@ def main():
     model = instantiate(cfg.model, dataset={"root_dir":root_dir})
     model_path = train_task.artifacts['model_checkpoint'].get_local_copy()
     network = model.network
-
-    # # Load t0 model
-    # t_model = copy.deepcopy(network)
-
-    # # load model to predict t+1
-    # t_model = t_model.to('cuda')
-    # train_task = Task.get_task(task_id="2788374a134342f2b7331e3854752412")
-    # model_path = train_task.artifacts['model_checkpoint'].get_local_copy()#"/data/t5chx.pt"
-    # #model_state_dict = torch.load(model_path)
-    # model_state_dict = torch.load(model_path+'/'+os.listdir(model_path)[0])#,map_location=torch.device('cpu'))
-    # t_model.load_state_dict(model_state_dict['train_model'])
-    # t
-    #_model.eval()
-
-
-    network = network.to('cuda') #model_path = "/data/t5chx.pt"
+    network = network.to('cuda')
+    #model_path = "/data/t5chx.pt"
     #model_state_dict = torch.load(model_path)
     model_state_dict = torch.load(model_path+'/'+os.listdir(model_path)[0])#,map_location=torch.device('cpu'))
     network.load_state_dict(model_state_dict['train_model'])
     network.eval()
-
 
     max_idx = args['max_idx']
     bs = args['batch_size']
@@ -332,7 +281,6 @@ def main():
     else:
         loader = DataLoader(model.t_dataset, batch_size=bs, num_workers=args['num_workers'], worker_init_fn=seed_worker, generator=g, shuffle=False, collate_fn=train_collate_fn)
     print ('Dataloader first few files: {}'.format(loader.dataset.file_list[:10]))
-
     trues = np.zeros((max_idx, d))
     preds = np.zeros((max_idx, d))
 
@@ -357,46 +305,24 @@ def main():
     pixel_x, pixel_y = args['pixel']
     t = args['time_step']
 
+
     #hack_map = [1, 2, 3, 0]
     if is_perm == False:
         for idx, i in (enumerate(loader)):
-            inp, true, av_pred = prepare_data(i, cfg.model.network.in_channels,
+            inp, true = prepare_data(i, cfg.model.network.in_channels,
                                       cfg.model.network.out_channels, cfg.train.transform)
             pred = network(inp.to("cuda"))
             pred = pred.cpu().detach()#.numpy()
 
             pred = unstack_on_time(pred, d, num_channels=d,
                                        crop = tuple(cfg.train.transform.pad_tuple))
-            # inp, true, pred_t0 = prepare_data(i, cfg.model.network.in_channels,
-            #                           cfg.model.network.out_channels, cfg.train.transform,
-            #                          t_model)
-            # pred = network(inp.to("cuda"))
-            # pred = pred.cpu().detach()#.numpy()
-
-            # pred = unstack_on_time(pred, d, num_channels=d,
-            #                            crop = tuple(cfg.train.transform.pad_tuple))
-
             #true = (true+dynamic_input_mean)*dynamic_input_std
-            #pred = m.forward(i[0])
-            #true = i[2]
-            av_pred = torch.moveaxis(av_pred, 2, 4)
             true = torch.moveaxis(true, 2, 4)
 
-            true = true + av_pred
-            pred = pred + av_pred
-
-            pred1 = pred[:,:,:,:,0::2]
-            true1 = true[:,:,:,:,0::2]
-            pred2 = pred[:,:,:,:,1::2]
-            true2 = true[:,:,:,:,1::2]
-            #pdb.set_trace()
-            # pred_t0 = torch.moveaxis(pred_t0, 2, 4)
-            #pred = torch.cat([pred_t0.cpu().detach(), pred], 1)
-            # pred = pred + pred_t0.cpu().detach()
-            #pred1 = pred[:,0,:,:,0]
-            #true1 = true[:,0,:,:,0]
-            #pred2 = pred[:,5,:,:,0]
-            #true2 = true[:,5,:,:,0]
+            # pred1 = pred[:,0,:,:,0]
+            # true1 = true[:,0,:,:,0]
+            # pred2 = pred[:,5,:,:,0]
+            # true2 = true[:,5,:,:,0]
             if is_waveTransform:
                 _,_,rh,rw = pred.shape
                 Yl = pred[:, :24,:,:]
@@ -409,16 +335,12 @@ def main():
                 true = ifm((Yl, Yh))
 
 
-            #pred = np.clip(pred, 0, 255)
-            try:
-                pdb.set_trace()
-                print (mean_squared_error(pred.flatten(), true.flatten()))
-                #mse.append(mean_squared_error(pred[:,1:2].flatten(), true[:,1:2].flatten()))
-                mse.append(mean_squared_error(pred.flatten(), true.flatten()))
-                mse1.append(mean_squared_error(pred1.flatten(), true1.flatten()))
-                mse2.append(mean_squared_error(pred2.flatten(), true2.flatten()))
-            except:
-                pdb.set_trace()
+            pred = np.clip(pred, 0, 255)
+            #print (mean_squared_error(pred.flatten(), true.flatten()))
+            mse.append(mean_squared_error(pred.flatten(), true.flatten()))
+            print(mean_squared_error(pred.flatten(), true.flatten()))
+            #mse1.append(mean_squared_error(pred1.flatten(), true1.flatten()))
+            #mse2.append(mean_squared_error(pred2.flatten(), true2.flatten()))
 
             if idx>=max_idx/bs:
                 continue
@@ -436,7 +358,6 @@ def main():
                 # with open('data/interim/'+str(cfg.model.dataset.time_step)+"pred_5avg.npy", 'wb') as f: np.save(f, pred[0])
                 # return
                 if idx==args['viz_idx']:
-                    #plot_tmaps(true[0, 0:2].numpy(), pred[0, 0:2].numpy(), args['viz_dir'], logger)
                     plot_tmaps(true[0].numpy(), pred[0].numpy(), args['viz_dir'], logger)
             #msenz.append(mse_func(pred.flatten(), true.flatten(), nonzero))
             #trues.extend(p_true)
@@ -459,8 +380,7 @@ def main():
                 switch = perm[directions]
                 for c in range(1,12): switch = np.vstack([switch, perm[directions]+(8*c)])
                 inp, true = prepare_data(i, cfg.model.network.in_channels,
-                                      cfg.model.network.out_channels, cfg.train.transform,
-                                         t_model, switch)
+                                      cfg.model.network.out_channels, cfg.train.transform, switch)
                 true = torch.moveaxis(true, 2, 4)
 
 
@@ -486,10 +406,10 @@ def main():
                     Yh = [true[:, 24:,:,:].reshape((bs, 24, 3, rh, rw))]
                     true = ifm((Yl, Yh))
 
-            # chk = i[0][:,11:12, 0::2, :,:]
-            # chk = torch.moveaxis(chk, 2, 4)
-            # pred_comb = chk.numpy() + pred_comb
-            # true_comb = chk.numpy() + true_comb
+            chk = i[0][:,11:12, 0::2, :,:]
+            chk = torch.moveaxis(chk, 2, 4)
+            pred_comb = chk.numpy() + pred_comb
+            true_comb = chk.numpy() + true_comb
 
             pred_comb = np.clip(pred_comb, 0, 255)
             try:
@@ -510,8 +430,8 @@ def main():
                 print ("Failed in mse calc!")
 
             if idx == args['viz_idx']:
-                plot_tmaps(true_comb[0], pred_comb[0], args['viz_dir'], logger)
-                #continue
+                #plot_tmaps(true_comb[0], pred_comb[0], args['viz_dir'], logger)
+                continue
             # mse1.append(mean_squared_error(pred1.flatten(), true1.flatten()))
             # mse2.append(mean_squared_error(pred2.flatten(), true2.flatten()))
 
@@ -535,8 +455,8 @@ def main():
 
     print (mse)
     print("Overall MSE: {}".format(sum(mse)/len(mse)))
-    print("MSE vol: {}".format(sum(mse1)/len(mse1)))
-    print("MSE speed: {}".format(sum(mse2)/len(mse2)))
+    #print("MSE ts 0 ch2/8: {}".format(sum(mse1)/len(mse1)))
+    #print("MSE ts 5 ch2/8: {}".format(sum(mse2)/len(mse2)))
     plot_dims(logger, trues, preds, d)
 if __name__ == "__main__":
     main()

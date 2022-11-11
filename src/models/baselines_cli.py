@@ -286,7 +286,7 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
             input_batch = torch.cat([dynamic, static], dim=1)
         else:
             input_batch = dynamic
-        input_batch = F.pad(input_batch, pad=pad_tuple)
+        #input_batch = F.pad(input_batch, pad=pad_tuple)
         #pdb.set_trace()
         #pred = t_model(input_batch)
         #pdb.set_trace()
