@@ -28,5 +28,5 @@ dataset:
   perm: False
 
 valset: True
-valset_limit: 100
+valset_limit: 1000
 val_filter: "**/validation/*8ch.h5"

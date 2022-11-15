@@ -58,7 +58,7 @@ class RingUNet(nn.Module):
         self.ring_sizes = list(range(3, ring_end, ring_step))
 
 
-        # create a 2d array of ones, size 5x5 with outer border elements set to 0
+        # # create a 2d array of ones, size 5x5 with outer border elements set to 0
         for idx,ring_s in enumerate(self.ring_sizes):
             tensor = torch.ones((in_channels, 1, ring_s, ring_s))
             tensor[:, :, 1:-1, 1:-1] = 0

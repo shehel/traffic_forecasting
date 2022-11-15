@@ -12,15 +12,15 @@ optimizer:
   weight_decay: 0.0001
 dataloader:
   shuffle: True
-  batch_size: 2
+  batch_size: 1
   num_workers: 0
   train_eval: 1000
 transform:
   in_h: 495
   in_w: 436
   pad_tuple:
-  - 0
-  - 0
-  - 0
+  - 6
+  - 6
+  - 1
   - 0
   static: False
