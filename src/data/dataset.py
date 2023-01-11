@@ -1,3 +1,4 @@
+import datetime
 import random
 from pathlib import Path
 from typing import Any
@@ -126,8 +127,26 @@ class T4CDataset(Dataset):
         file_idx = idx // MAX_TEST_SLOT_INDEX
         start_hour = idx % MAX_TEST_SLOT_INDEX
 
+        start_h = start_hour // 12
+        start_m = (start_hour % 12)*5
+        # convert start_hour to list called hm of hour and minutes format where start_hour 0 is [0,0] and start_hourt 1 is [0,5] in 5 minute increments
+        #hm = [0, start_hour * 5]
+
+        file_name = self.file_list[file_idx].parts[-1]
+        # extract date from from file_name containing date and place and convert to list of [year, month, day]
+        date = [int(x) for x in file_name.split('_')[0].split('-')]
+
+        # get day of the week from date given as list of [year, month, day]
+        day = datetime.date(date[0], date[1], date[2]).weekday()
+        
+        # set month to 0 and day to day of the week
+        # so its consistent with corresponding data in test set
+        date[1] = 0
+        date[2] = day
+        date = [start_h, start_m, 0] + date
 
         two_hours = self._load_h5_file(self.file_list[file_idx], sl=slice(start_hour, start_hour + 12 * 2 + 1))
+        # convert 
         #two_hours = self.files[file_idx][start_hour:start_hour+24]
 
         two_hours = two_hours[:,::self.sampling_height,::self.sampling_width,self.dim_start::self.dim_step]
@@ -159,7 +178,7 @@ class T4CDataset(Dataset):
             reduc = tl.tenalg.multi_mode_dot(dynamic_input, self.factors, transpose=True)
             dynamic_input = torch.from_numpy(reduc).float()
 
-        return dynamic_input, static_ch, output_data
+        return dynamic_input, static_ch, output_data, date
 
     def _to_torch(self, data):
         data = torch.from_numpy(data)
@@ -167,14 +186,17 @@ class T4CDataset(Dataset):
         return data
 
 def train_collate_fn(batch):
-    dynamic_input_batch, static_input_batch, target_batch = zip(*batch)
+    dynamic_input_batch, static_input_batch, target_batch, date_batch = zip(*batch)
     dynamic_input_batch = np.stack(dynamic_input_batch, axis=0)
     static_input_batch = np.stack(static_input_batch, axis=0)
     target_batch = np.stack(target_batch, axis=0)
+    date_batch = np.stack(date_batch, axis=0)
+    date_batch = torch.from_numpy(date_batch).float()
     dynamic_input_batch = np.moveaxis(dynamic_input_batch, source=4, destination=2)
     dynamic_input_batch = torch.from_numpy(dynamic_input_batch).float()
     static_input_batch = torch.from_numpy(static_input_batch)
     target_batch = np.moveaxis(target_batch, source=4, destination=2)
     target_batch = torch.from_numpy(target_batch).float()
 
-    return dynamic_input_batch, static_input_batch, target_batch
+
+    return dynamic_input_batch, static_input_batch, target_batch, date_batch

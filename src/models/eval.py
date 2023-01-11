@@ -205,15 +205,15 @@ def prepare_data(batch, dynamic_channels, out_channels, transform_p, switch=None
         pad_tuple = tuple(transform_p['pad_tuple'])
         if is_static == True:
             dynamic_channels = dynamic_channels - 9
-        dynamic, static, target  = batch
+        dynamic, static, target, dates  = batch
         #target = dynamic[:, 11:12, switch[0][0]:switch[0][0]+1, :, :] - target
         #dynamic = (dynamic - dynamic_input_mean) / dynamic_input_std
 
         #post_d = dynamic.clone()
         #post_d[:, :10, 0, :, :] = dynamic[:, 1:11, 0, :, :]
 
-        pred = average_model.forward(dynamic)
-        target = target - pred
+        #pred = average_model.forward(dynamic)
+        #target = target - pred
         dynamic = dynamic.reshape(-1, dynamic_channels, in_h, in_w)
         if switch is not None:
             dynamic = dynamic[:,switch.flatten(),:,:]
@@ -224,6 +224,7 @@ def prepare_data(batch, dynamic_channels, out_channels, transform_p, switch=None
             input_batch = torch.cat([dynamic, static], dim=1)
         else:
             input_batch = dynamic
+
 
         input_batch = F.pad(input_batch, pad=pad_tuple)
 
@@ -246,8 +247,9 @@ def prepare_data(batch, dynamic_channels, out_channels, transform_p, switch=None
         #input_batch = F.pad(input_batch, pad=pad_tuple)
 
         #target = (target - dynamic_input_mean) / dynamic_input_std
-
-        return input_batch, target, pred
+        input_batch = input_batch.to("cuda")
+        dates = dates.to("cuda")
+        return [input_batch, dates], target
 
 """
 Provides evaluation information for a given model and dataset.
@@ -258,11 +260,11 @@ Information include
 """
 def main():
     reset_seeds(123)
-    task = Task.init(project_name="t4c_eval", task_name="Eval avg")
+    task = Task.init(project_name="t4c_eval", task_name="Eval avg d4 without time2vec")
     logger = task.get_logger()
     args = {
-        'task_id': '9081991cf163414294aa6f1005986b63',
-        'batch_size': 2,
+        'task_id': '0c5df87f0ef64f33b2fe4078a545f454',
+        'batch_size': 1,
         'num_workers': 2,
         'pixel': (108, 69),#(221, 192),
         'loader': 'val',
@@ -360,9 +362,9 @@ def main():
     #hack_map = [1, 2, 3, 0]
     if is_perm == False:
         for idx, i in (enumerate(loader)):
-            inp, true, av_pred = prepare_data(i, cfg.model.network.in_channels,
+            inp, true = prepare_data(i, cfg.model.network.in_channels,
                                       cfg.model.network.out_channels, cfg.train.transform)
-            pred = network(inp.to("cuda"))
+            pred = network(inp)
             pred = pred.cpu().detach()#.numpy()
 
             pred = unstack_on_time(pred, d, num_channels=d,
@@ -379,11 +381,11 @@ def main():
             #true = (true+dynamic_input_mean)*dynamic_input_std
             #pred = m.forward(i[0])
             #true = i[2]
-            av_pred = torch.moveaxis(av_pred, 2, 4)
+            #av_pred = torch.moveaxis(av_pred, 2, 4)
             true = torch.moveaxis(true, 2, 4)
 
-            true = true + av_pred
-            pred = pred + av_pred
+            #true = true + av_pred
+            #pred = pred + av_pred
 
             pred1 = pred[:,:,:,:,0::2]
             true1 = true[:,:,:,:,0::2]
@@ -411,7 +413,6 @@ def main():
 
             #pred = np.clip(pred, 0, 255)
             try:
-                pdb.set_trace()
                 print (mean_squared_error(pred.flatten(), true.flatten()))
                 #mse.append(mean_squared_error(pred[:,1:2].flatten(), true[:,1:2].flatten()))
                 mse.append(mean_squared_error(pred.flatten(), true.flatten()))

@@ -20,11 +20,13 @@ import numpy as np
 import torch
 from torch import nn
 import pdb
+from einops import rearrange
 
 
 class UNet(nn.Module):
     def __init__(
         self, in_channels=1, out_channels=2, depth=5, wf=6, padding=False, batch_norm=False, up_mode="upconv",
+        pos_emb=False
     ):
         """
         Implementation of
@@ -53,63 +55,128 @@ class UNet(nn.Module):
         self.padding = padding
         self.depth = depth
         prev_channels = in_channels
+
+        if pos_emb:
+            self.pos_model = Date2Vec()
+        else:
+            self.pos_model = None
         self.down_path = nn.ModuleList()
         for i in range(depth):
-            self.down_path.append(UNetConvBlock(prev_channels, 2 ** (wf + i), padding, batch_norm))
+            self.down_path.append(UNetConvBlock(prev_channels, 2 ** (wf + i), padding, batch_norm, time_emb_dim=6 if pos_emb else None))
             prev_channels = 2 ** (wf + i)
 
         self.up_path = nn.ModuleList()
         for i in reversed(range(depth - 1)):
-            self.up_path.append(UNetUpBlock(prev_channels, 2 ** (wf + i), up_mode, padding, batch_norm))
+            self.up_path.append(UNetUpBlock(prev_channels, 2 ** (wf + i), up_mode, padding, batch_norm, time_emb_dim=6 if pos_emb else None))
             prev_channels = 2 ** (wf + i)
 
         self.last = nn.Conv2d(prev_channels, out_channels, kernel_size=1)
 
     def forward(self, x, *args, **kwargs):
+        x, t  = x
+        t = self.pos_model(t) if exists(self.pos_model) else None
         blocks = []
         for i, down in enumerate(self.down_path):
-            x = down(x)
+            x = down(x, t)
             if i != len(self.down_path) - 1:
                 blocks.append(x)
                 x = torch.nn.functional.max_pool2d(x, 2)
 
         for i, up in enumerate(self.up_path):
-            x = up(x, blocks[-i - 1])
+            x = up(x, blocks[-i - 1],t)
         x=self.last(x)
         return x
 
+# helper functions
+def exists(x):
+    return x is not None
 
-class UNetConvBlock(nn.Module):
-    def __init__(self, in_size, out_size, padding, batch_norm):
-        super(UNetConvBlock, self).__init__()
-        block = []
+class Date2Vec(nn.Module):
+    def __init__(self, k=32, act="sin"):
+        super(Date2Vec, self).__init__()
 
-        block.append(nn.Conv2d(in_size, out_size, kernel_size=3, padding=int(padding)))
-        block.append(nn.ReLU())
-        if batch_norm:
-            block.append(nn.BatchNorm2d(out_size))
+        if k % 2 == 0:
+            k1 = k // 2
+            k2 = k // 2
+        else:
+            k1 = k // 2
+            k2 = k // 2 + 1
+        
+        self.fc1 = nn.Linear(6, k1)
 
-        block.append(nn.Conv2d(out_size, out_size, kernel_size=3, padding=int(padding)))
-        block.append(nn.ReLU())
-        if batch_norm:
-            block.append(nn.BatchNorm2d(out_size))
+        self.fc2 = nn.Linear(6, k2)
+        self.d2 = nn.Dropout(0.3)
+ 
+        if act == 'sin':
+            self.activation = torch.sin
+        else:
+            self.activation = torch.cos
 
-        self.block = nn.Sequential(*block)
+        self.fc3 = nn.Linear(k, k // 2)
+        self.d3 = nn.Dropout(0.3)
+        
+        self.fc4 = nn.Linear(k // 2, 6)
+        
+        self.fc5 = torch.nn.Linear(6, 6)
 
-    def forward(self, x):  # noqa
-        out = self.block(x)
+    def forward(self, x):
+        out1 = self.fc1(x)
+        out2 = self.d2(self.activation(self.fc2(x)))
+        out = torch.cat([out1, out2], 1)
+        out = self.d3(self.fc3(out))
+        out = self.fc4(out)
+        out = self.fc5(out)
         return out
 
+class Block(nn.Module):
+    def __init__(self, dim, dim_out):
+        super().__init__()
+        self.proj = nn.Conv2d(dim, dim_out, kernel_size=3, padding=1)
+        self.act = nn.ReLU()
+        self.norm = nn.BatchNorm2d(dim_out)
+
+    def forward(self, x, scale_shift=None):
+        x = self.proj(x)
+        x = self.norm(x)
+        if exists(scale_shift):
+            scale, shift = scale_shift
+            x = x * (scale + 1) + shift
+        return self.act(x)
+
+class UNetConvBlock(nn.Module):
+    def __init__(self, in_size, out_size, padding, batch_norm, 
+                time_emb_dim: Optional[int] = None,):
+        super(UNetConvBlock, self).__init__()
+        
+        self.mlp = (nn.Sequential(
+            nn.ReLU(), nn.Linear(time_emb_dim, out_size*2))
+            if exists(time_emb_dim) else None)
+
+        self.block1 = Block(in_size, out_size)
+        self.block2 = Block(out_size, out_size)
+        self.res_conv = nn.Conv2d(in_size, out_size, 1) if in_size != out_size else nn.Identity()
+
+
+    def forward(self, x, time_emb=None):  # noqa
+        scale_shift = None
+        if exists(self.mlp) and exists(time_emb):
+            time_emb = self.mlp(time_emb)
+            time_emb = rearrange(time_emb, 'b c -> b c 1 1')
+            scale_shift = time_emb.chunk(2, dim=1)
+        out = self.block1(x, scale_shift = scale_shift)
+        out = self.block2(out)
+
+        return out + self.res_conv(x)
 
 class UNetUpBlock(nn.Module):
-    def __init__(self, in_size, out_size, up_mode, padding, batch_norm):
+    def __init__(self, in_size, out_size, up_mode, padding, batch_norm, time_emb_dim: Optional[int] = None,):
         super(UNetUpBlock, self).__init__()
         if up_mode == "upconv":
             self.up = nn.ConvTranspose2d(in_size, out_size, kernel_size=2, stride=2)
         elif up_mode == "upsample":
             self.up = nn.Sequential(nn.Upsample(mode="bilinear", scale_factor=2), nn.Conv2d(in_size, out_size, kernel_size=1),)
 
-        self.conv_block = UNetConvBlock(in_size, out_size, padding, batch_norm)
+        self.conv_block = UNetConvBlock(in_size, out_size, padding, batch_norm, time_emb_dim)
 
     def center_crop(self, layer, target_size):
         _, _, layer_height, layer_width = layer.size()
@@ -119,119 +186,11 @@ class UNetUpBlock(nn.Module):
         diff_x_target_size_ = diff_x + target_size[1]
         return layer[:, :, diff_y:diff_y_target_size_, diff_x:diff_x_target_size_]
 
-    def forward(self, x, bridge):  # noqa
+    def forward(self, x, bridge, time_emb=None):  # noqa
         up = self.up(x)
         crop1 = self.center_crop(bridge, up.shape[2:])
         out = torch.cat([up, crop1], 1)
-        out = self.conv_block(out)
+        out = self.conv_block(out, time_emb)
 
         return out
 
-
-class UNetTransfomer:
-    """Transformer `T4CDataset` <-> `UNet`.
-
-    zeropad2d only works with
-    """
-
-    @staticmethod
-    def unet_pre_transform(
-        data: np.ndarray,
-        zeropad2d: Optional[Tuple[int, int, int, int]] = None,
-        stack_channels_on_time: bool = False,
-        batch_dim: bool = False,
-        from_numpy: bool = False,
-        static: np.ndarray=None,
-        **kwargs
-    ) -> torch.Tensor:
-        """Transform data from `T4CDataset` be used by UNet:
-
-        - put time and channels into one dimension
-        - padding
-        """
-        if from_numpy:
-            data = torch.from_numpy(data).float()
-
-        if not batch_dim:
-            data = torch.unsqueeze(data, 0)
-            if static is not None:
-                static = torch.unsqueeze(static,0)
-
-        if stack_channels_on_time:
-            data = UNetTransfomer.transform_stack_channels_on_time(data, batch_dim=True)
-            if static is not None:
-                data = torch.cat((data,static),1)
-        if zeropad2d is not None:
-            zeropad2d = torch.nn.ZeroPad2d(zeropad2d)
-            data = zeropad2d(data)
-        if not batch_dim:
-            data = torch.squeeze(data, 0)
-        return data
-
-    @staticmethod
-    def unet_post_transform(
-        data: torch.Tensor, crop: Optional[Tuple[int, int, int, int]] = None, stack_channels_on_time: bool = False, batch_dim: bool = False, **kwargs
-    ) -> torch.Tensor:
-        """Bring data from UNet back to `T4CDataset` format:
-
-        - separats common dimension for time and channels
-        - cropping
-        """
-        if not batch_dim:
-            data = torch.unsqueeze(data, 0)
-
-        if crop is not None:
-            _, _, height, width = data.shape
-            left, right, top, bottom = crop
-            right = width - right
-            bottom = height - bottom
-            data = data[:, :, top:bottom, left:right]
-        if stack_channels_on_time:
-            data = UNetTransfomer.transform_unstack_channels_on_time(data, batch_dim=True)
-        if not batch_dim:
-            data = torch.squeeze(data, 0)
-        return data
-
-    @staticmethod
-    def transform_stack_channels_on_time(data: torch.Tensor, batch_dim: bool = False):
-        """
-        `(k, 12, 495, 436, 8) -> (k, 12 * 8, 495, 436)`
-        """
-
-        if not batch_dim:
-            # `(12, 495, 436, 8) -> (1, 12, 495, 436, 8)`
-            data = torch.unsqueeze(data, 0)
-        num_time_steps = data.shape[1]
-        num_channels = data.shape[4]
-
-        # (k, 12, 495, 436, 8) -> (k, 12, 8, 495, 436)
-        data = torch.moveaxis(data, 4, 2)
-
-        # (k, 12, 8, 495, 436) -> (k, 12 * 8, 495, 436)
-        data = torch.reshape(data, (data.shape[0], num_time_steps * num_channels, 495, 436))
-
-        if not batch_dim:
-            # `(1, 12, 495, 436, 8) -> (12, 495, 436, 8)`
-            data = torch.squeeze(data, 0)
-        return data
-
-    @staticmethod
-    def transform_unstack_channels_on_time(data: torch.Tensor, num_channels=8, batch_dim: bool = False):
-        """
-        `(k, 12 * 8, 495, 436) -> (k, 12, 495, 436, 8)`
-        """
-        if not batch_dim:
-            # `(12, 495, 436, 8) -> (1, 12, 495, 436, 8)`
-            data = torch.unsqueeze(data, 0)
-
-        num_time_steps = int(data.shape[1] / num_channels)
-        # (k, 12 * 8, 495, 436) -> (k, 12, 8, 495, 436)
-        data = torch.reshape(data, (data.shape[0], num_time_steps, num_channels, 495, 436))
-
-        # (k, 12, 8, 495, 436) -> (k, 12, 495, 436, 8)
-        data = torch.moveaxis(data, 2, 4)
-
-        if not batch_dim:
-            # `(1, 12, 495, 436, 8) -> (12, 495, 436, 8)`
-            data = torch.squeeze(data, 0)
-        return data

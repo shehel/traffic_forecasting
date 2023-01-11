@@ -1,9 +1,7 @@
 #  Copyright 2021 Institute of Advanced Research in Artificial Intelligence (IARAI) GmbH.
 #  IARAI licenses this file to You under the Apache License, Version 2.0
 #  (the "License"); you may not use this file except in compliance with
-#  * TODO the
-#  **
-#  License MInvestigate diff model. Why is it giving the results its giving?eeting. You may obtain a copy of the License at
+#  the License. You may obtain a copy of the License at
 #
 #  http://www.apache.org/licenses/LICENSE-2.0
 #  Unless required by applicable law or agreed to in writing, software
@@ -21,9 +19,6 @@ import tqdm
 from pathlib import Path
 from typing import Optional
 import pdb
-
-from functools import partial
-import copy
 
 import numpy as np
 import torch
@@ -68,9 +63,6 @@ from clearml import Dataset
 
 import ignite.distributed as idist
 
-from src.models.naverage import NaiveAverage
-from src.models.ar import AR
-from einops import rearrange
 def reset_seeds(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -214,28 +206,14 @@ def run_model(
     # logging.info(system_status())
 
     checkpoints_dir = os.path.join(os.path.curdir, "checkpoints")
-    #t_model = copy.deepcopy(model.network)
-    t_model = AR(96, 48)
-
-    # load model to predict t+1
-    t_model = t_model.to('cuda')
-    train_task = Task.get_task(task_id="2b2cb5c3b6b54eb5b17c36a8f0ecc8e7")
-    model_path = train_task.artifacts['model_checkpoint'].get_local_copy()#"/data/t5chx.pt"
-    pdb.set_trace()
-    #model_state_dict = torch.load(model_path)
-    model_state_dict = torch.load(model_path+'/'+os.listdir(model_path)[-1])#,map_location=torch.device('cpu'))
-    t_model.load_state_dict(model_state_dict['train_model'], strict=False)
-    t_model.eval()
-
-
-    train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_loader, model.network, t_model, checkpoints_dir, cfg)
+    train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_loader, model.network, checkpoints_dir, cfg)
     logging.info("End training of train_model %s on %s for %s epochs", model.network, device, cfg.train.epochs)
 
     # Upload checkpoint folder con
     task.upload_artifact(name='model_checkpoint', artifact_object=checkpoints_dir)
 
 def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_loader,
-                 train_model, t_model, checkpoints_dir, cfg):
+                 train_model, checkpoints_dir, cfg):
     # Validator
     is_static = cfg.train.transform.static
     if is_static:
@@ -252,8 +230,6 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
     scaler = cfg.train.scaler
     pad_tuple = tuple(cfg.train.transform.pad_tuple)
 
-    #average_model = NaiveAverage()
-
     # dynamic_input_mean = np.load('data/processed/dynamic_input_mean.npy')
     # dynamic_input_std = np.load('data/processed/dynamic_input_std.npy')
 
@@ -261,38 +237,24 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
     # dynamic_input_std = torch.from_numpy(dynamic_input_std)[None, None, :, None, None].float().cuda()
 
     def prepare_batch_fn(batch, device, non_blocking):
-        dynamic, static, target  = batch
+        dynamic, static, target, dates  = batch
         dynamic = convert_tensor(dynamic, device, non_blocking)
         target = convert_tensor(target, device, non_blocking)
-
+        dates = convert_tensor(dates, device, non_blocking)
         #dynamic = (dynamic - dynamic_input_mean) / dynamic_input_std
-        #
-        #target = dynamic[:, 11:12, 0:1, :, :] - target
-
-        pred = t_model.forward(rearrange(dynamic, 'b c t h w -> (b h w) (c t)'))
-        pred = rearrange(pred, '(b h w) (c t) -> b c t h w')
-        pdb.set_trace()
-        target = target - pred
         #pdb.set_trace()
         #target = dynamic[:, 11:12, 0:1, :, :] - target
         dynamic = dynamic.reshape(-1, dynamic_channels, in_h, in_w)
-        #target = target - pred
         target = target.reshape(-1, out_channels, in_h, in_w)
         target = F.pad(target, pad=pad_tuple)
         static = convert_tensor(static, device, non_blocking)
-
         if is_static:
             input_batch = torch.cat([dynamic, static], dim=1)
         else:
             input_batch = dynamic
         input_batch = F.pad(input_batch, pad=pad_tuple)
-        #pdb.set_trace()
-        #pred = t_model(input_batch)
-        #pdb.set_trace()
-        #target = target - pred
-        #pdb.set_trace()
 
-        return input_batch, target
+        return [input_batch,dates], target
 
     validation_evaluator = create_supervised_evaluator(train_model, metrics={"val_loss": Loss(loss), "neg_val_loss": Loss(loss)*-1}, device=device, amp_mode=amp_mode,
                                                        prepare_batch=prepare_batch_fn)

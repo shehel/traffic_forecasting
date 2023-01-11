@@ -167,24 +167,32 @@ def prepare_data(batch, dynamic_channels, out_channels, transform_p, switch=None
 
 
 class ValidDataset(Dataset):
-    def __init__(self, args: argparse.Namespace, valid_data: np.ndarray):
+    def __init__(self, args: argparse.Namespace, valid_data: np.ndarray, 
+    add_data: np.ndarray = None):
         self.args = args
         self.valid_data = valid_data
+        self.add_data = add_data
 
     def __getitem__(self, index):
         dynamic_input = self.valid_data[index, :, :, :, :]
-        return dynamic_input
+        day, start_hour = self.add_data[index]
+        start_h = start_hour // 12
+        start_m = (start_hour % 12) * 5
+        date = [start_h, start_m, 0, 2020, 0, day]
+        return dynamic_input, date
 
     def __len__(self):
         return self.valid_data.shape[0]
 
 
 def valid_collate_fn(batch):
-    dynamic_input_batch = batch
+    dynamic_input_batch, date_batch = zip(*batch)
     dynamic_input_batch = np.stack(dynamic_input_batch, axis=0)
+    date_batch = np.stack(date_batch, axis=0)
     dynamic_input_batch = np.moveaxis(dynamic_input_batch, source=4, destination=2)
     dynamic_input_batch = torch.from_numpy(dynamic_input_batch).float()
-    return dynamic_input_batch
+    date_batch = torch.from_numpy(date_batch).float()
+    return dynamic_input_batch, date_batch
 
 
 """
@@ -198,14 +206,14 @@ Information include
 
 def main():
     reset_seeds(123)
-    task = Task.init(project_name="t4c_eval", task_name="Eval avg")
+    task = Task.init(project_name="t4c_eval", task_name="Make Submission t2v day")
     logger = task.get_logger()
     args = {
-        "task_id": "b94c496b75be4acca86b760ecb4f2e7b",
+        "task_id": "fe8cab174cc14d309c1c1c10b8a836d3",
         "data_dir": "/home/shehel/ml/NeurIPS2021-traffic4cast/data/raw/",
-        "submission_name": "d1v2",
+        "submission_name": "d2wot2v",
         "batch_size": 1,
-        "num_workers": 2,
+        "num_workers": 0,
         "pixel": (108, 69),  # (221, 192),
         "loader": "val",
         "num_channels": 8,
@@ -274,12 +282,18 @@ def main():
             ) as file_in:
                 valid_data = file_in.get("array")
                 valid_data = np.array(valid_data)
-            valid_dataset = ValidDataset(args=args, valid_data=valid_data)
+            with h5py.File(
+                args["data_dir"] + f"{city}/{city}_test_additional_spatiotemporal.h5", "r"
+            ) as file_in:
+                add_data = file_in.get("array")
+                add_data = np.array(add_data)
+
+            valid_dataset = ValidDataset(args=args, valid_data=valid_data, add_data=add_data)
             valid_loader = DataLoader(
                 dataset=valid_dataset,
                 batch_size=bs,
                 shuffle=False,
-                num_workers=1,
+                num_workers=0,
                 collate_fn=valid_collate_fn,
                 pin_memory=True,
                 drop_last=False,
@@ -287,10 +301,11 @@ def main():
             valid_predictions = []
             mean_outs = []
             with torch.no_grad():
-                for dynamic_input_batch in tqdm.tqdm(valid_loader):
+                for dynamic_input_batch, dates_batch in tqdm.tqdm(valid_loader):
                     batch_size = dynamic_input_batch.size(0)
 
                     dynamic_input_batch = dynamic_input_batch.cuda()
+                    dates_batch = dates_batch.cuda()
                     # if args.input_normalization:
                     #     dynamic_input_batch = (
                     #         dynamic_input_batch - dynamic_input_mean
@@ -347,7 +362,8 @@ def main():
                                 [dynamic_input_batch, static_input_batch], dim=1
                             )
                         else:
-                            input_batch = dynamic_input_batch
+                            input_batch = dynamic_input_batch 
+                        input_batch = [input_batch, dates_batch]
                         prediction_batch = network(x=input_batch)
                         valid_predictions.append(prediction_batch.cpu().numpy())
 
