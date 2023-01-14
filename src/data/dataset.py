@@ -149,13 +149,16 @@ class T4CDataset(Dataset):
         # convert 
         #two_hours = self.files[file_idx][start_hour:start_hour+24]
 
-        two_hours = two_hours[:,::self.sampling_height,::self.sampling_width,self.dim_start::self.dim_step]
+        random_int_x = random.randint(0, 300)
+        random_int_y = random.randint(0, 300)
+        two_hours = two_hours[:,random_int_x:random_int_x + 128, 
+                    random_int_y:random_int_y+128,self.dim_start::self.dim_step]
 
         if self.perm:
             dir_sel = random.randint(0,3)
             two_hours = two_hours[:,:,:,perm[dir_sel]]
         #input_data, output_data = prepare_test(two_hours)
-        dynamic_input, output_data = two_hours[:12], two_hours[[12, 13, 14, 17, 20, 23]]
+        dynamic_input, output_data = two_hours[:6], two_hours[[6, 7, 8, 9, 10, 11]]
 
         # get static channels
         static_ch = self.static_dict[self.file_list[file_idx].parts[-3]]
@@ -173,10 +176,6 @@ class T4CDataset(Dataset):
         #     output_data = self.transform.pre_transform(output_data)
             # static_ch = self.transform.pre_transform(static_ch, stack_time=False)
         #input_data = torch.cat((input_data, static_ch), dim=0)
-        if self.reduced:
-            dynamic_input = dynamic_input.numpy()
-            reduc = tl.tenalg.multi_mode_dot(dynamic_input, self.factors, transpose=True)
-            dynamic_input = torch.from_numpy(reduc).float()
 
         return dynamic_input, static_ch, output_data, date
 
@@ -192,10 +191,10 @@ def train_collate_fn(batch):
     target_batch = np.stack(target_batch, axis=0)
     date_batch = np.stack(date_batch, axis=0)
     date_batch = torch.from_numpy(date_batch).float()
-    dynamic_input_batch = np.moveaxis(dynamic_input_batch, source=4, destination=2)
+    dynamic_input_batch = np.moveaxis(dynamic_input_batch, source=4, destination=1)
     dynamic_input_batch = torch.from_numpy(dynamic_input_batch).float()
     static_input_batch = torch.from_numpy(static_input_batch)
-    target_batch = np.moveaxis(target_batch, source=4, destination=2)
+    target_batch = np.moveaxis(target_batch, source=4, destination=1)
     target_batch = torch.from_numpy(target_batch).float()
 
 

@@ -244,8 +244,6 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
         #dynamic = (dynamic - dynamic_input_mean) / dynamic_input_std
         #pdb.set_trace()
         #target = dynamic[:, 11:12, 0:1, :, :] - target
-        dynamic = dynamic.reshape(-1, dynamic_channels, in_h, in_w)
-        target = target.reshape(-1, out_channels, in_h, in_w)
         target = F.pad(target, pad=pad_tuple)
         static = convert_tensor(static, device, non_blocking)
         if is_static:
@@ -254,7 +252,7 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
             input_batch = dynamic
         input_batch = F.pad(input_batch, pad=pad_tuple)
 
-        return [input_batch,dates], target
+        return input_batch, target
 
     validation_evaluator = create_supervised_evaluator(train_model, metrics={"val_loss": Loss(loss), "neg_val_loss": Loss(loss)*-1}, device=device, amp_mode=amp_mode,
                                                        prepare_batch=prepare_batch_fn)

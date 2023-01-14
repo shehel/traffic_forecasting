@@ -4,5 +4,5 @@ core:
     - test
 
 defaults:
-  - model: full_waveletv2.yaml
-  - train: default
+  - model: 3dnet
+  - train: test

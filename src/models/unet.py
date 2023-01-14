@@ -22,7 +22,6 @@ from torch import nn
 import pdb
 from einops import rearrange
 
-
 class UNet(nn.Module):
     def __init__(
         self, in_channels=1, out_channels=2, depth=5, wf=6, padding=False, batch_norm=False, up_mode="upconv",
