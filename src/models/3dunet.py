@@ -131,7 +131,6 @@ class ResBlock(TimestepBlock):
     def __init__(
         self,
         channels,
-        emb_channels,
         dropout,
         out_channels=None,
         use_conv=False,
@@ -141,7 +140,6 @@ class ResBlock(TimestepBlock):
     ):
         super().__init__()
         self.channels = channels
-        self.emb_channels = emb_channels
         self.dropout = dropout
         self.out_channels = out_channels or channels
         self.use_conv = use_conv
@@ -327,15 +325,15 @@ class UNet(nn.Module):
         self.num_heads = num_heads
         self.num_heads_upsample = num_heads_upsample
 
-        time_embed_dim = model_channels * 4
-        self.time_embed = nn.Sequential(
-            linear(model_channels, time_embed_dim),
-            SiLU(),
-            linear(time_embed_dim, time_embed_dim),
-        )
+        # time_embed_dim = model_channels * 4
+        # self.time_embed = nn.Sequential(
+        #     linear(model_channels, time_embed_dim),
+        #     SiLU(),
+        #     linear(time_embed_dim, time_embed_dim),
+        # )
 
-        if self.num_classes is not None:
-            self.label_emb = nn.Embedding(num_classes, time_embed_dim)
+        # if self.num_classes is not None:
+        #     self.label_emb = nn.Embedding(num_classes, time_embed_dim)
 
         self.input_blocks = nn.ModuleList(
             [
@@ -352,7 +350,6 @@ class UNet(nn.Module):
                 layers = [
                     ResBlock(
                         ch,
-                        time_embed_dim,
                         dropout,
                         out_channels=mult * model_channels,
                         dims=dims,
@@ -381,7 +378,6 @@ class UNet(nn.Module):
         self.middle_block = TimestepEmbedSequential(
             ResBlock(
                 ch,
-                time_embed_dim,
                 dropout,
                 dims=dims,
                 use_checkpoint=use_checkpoint,
@@ -390,7 +386,6 @@ class UNet(nn.Module):
             AttentionBlock(ch, use_checkpoint=use_checkpoint, num_heads=num_heads),
             ResBlock(
                 ch,
-                time_embed_dim,
                 dropout,
                 dims=dims,
                 use_checkpoint=use_checkpoint,
@@ -404,7 +399,6 @@ class UNet(nn.Module):
                 layers = [
                     ResBlock(
                         ch + input_block_chans.pop(),
-                        time_embed_dim,
                         dropout,
                         out_channels=model_channels * mult,
                         dims=dims,
