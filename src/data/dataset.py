@@ -191,10 +191,10 @@ def train_collate_fn(batch):
     target_batch = np.stack(target_batch, axis=0)
     date_batch = np.stack(date_batch, axis=0)
     date_batch = torch.from_numpy(date_batch).float()
-    dynamic_input_batch = np.moveaxis(dynamic_input_batch, source=4, destination=1)
+    dynamic_input_batch = np.moveaxis(dynamic_input_batch, source=4, destination=2)
     dynamic_input_batch = torch.from_numpy(dynamic_input_batch).float()
     static_input_batch = torch.from_numpy(static_input_batch)
-    target_batch = np.moveaxis(target_batch, source=4, destination=1)
+    target_batch = np.moveaxis(target_batch, source=4, destination=2)
     target_batch = torch.from_numpy(target_batch).float()
 
 

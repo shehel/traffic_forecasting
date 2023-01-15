@@ -244,6 +244,9 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
         #dynamic = (dynamic - dynamic_input_mean) / dynamic_input_std
         #pdb.set_trace()
         #target = dynamic[:, 11:12, 0:1, :, :] - target
+        dynamic = dynamic.reshape(-1, dynamic_channels, in_h, in_w)
+        target = target.reshape(-1, out_channels, in_h, in_w)
+
         target = F.pad(target, pad=pad_tuple)
         static = convert_tensor(static, device, non_blocking)
         if is_static:

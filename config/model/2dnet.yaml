@@ -1,0 +1,41 @@
+_target_: src.models.model.Model
+network:
+    _target_: src.models.3dunet.UNet
+    in_channels: 48 # 12*8+9
+    model_channels: 64 # 6*8
+    out_channels: 48
+    num_res_blocks: 1
+    attention_resolutions:
+    scale_time_dim: 0
+    dropout: 0
+    channel_mult: 
+    - 1
+    - 2
+    - 4
+    - 8
+    conv_resample: True
+    dims: 2
+    num_classes: 
+    num_heads: 1
+    num_heads_upsample: -1
+    use_scale_shift_norm: False
+
+dataset:
+  _target_: src.data.dataset.T4CDataset
+  root_dir: "7days"
+  limit:
+  use_npy: False
+  sampling_height: 1
+  sampling_width: 1
+  dim_start: 0
+  dim_step: 1
+  output_start: 0
+  output_step: 1
+  reduced: False
+  single_channel:
+  time_step: 
+  perm: False
+
+valset: True
+valset_limit:
+val_filter: "**/validation/*8ch.h5"
