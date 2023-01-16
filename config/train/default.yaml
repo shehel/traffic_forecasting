@@ -13,14 +13,14 @@ optimizer:
 dataloader:
   shuffle: True
   batch_size: 16
-  num_workers: 8
+  num_workers: 4
   train_eval: 1000
 transform:
-  in_h: 495
-  in_w: 436
+  in_h: 128
+  in_w: 128
   pad_tuple:
-  - 6
-  - 6
-  - 1
   - 0
-  static: True
+  - 0
+  - 0
+  - 0
+  static: False

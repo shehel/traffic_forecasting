@@ -77,13 +77,16 @@ class UNet(nn.Module):
         t = self.pos_model(t) if exists(self.pos_model) else None
         blocks = []
         for i, down in enumerate(self.down_path):
-            x = down(x, t)
+            if i == 0:
+                x = down(x, t)
+            else:
+                x = down(x)
             if i != len(self.down_path) - 1:
                 blocks.append(x)
                 x = torch.nn.functional.max_pool2d(x, 2)
 
         for i, up in enumerate(self.up_path):
-            x = up(x, blocks[-i - 1],t)
+            x = up(x, blocks[-i - 1])
         x=self.last(x)
         return x
 
@@ -102,9 +105,9 @@ class Date2Vec(nn.Module):
             k1 = k // 2
             k2 = k // 2 + 1
         
-        self.fc1 = nn.Linear(6, k1)
+        self.fc1 = nn.Linear(1, k1)
 
-        self.fc2 = nn.Linear(6, k2)
+        self.fc2 = nn.Linear(1, k2)
         self.d2 = nn.Dropout(0.3)
  
         if act == 'sin':

@@ -137,25 +137,29 @@ class T4CDataset(Dataset):
         date = [int(x) for x in file_name.split('_')[0].split('-')]
 
         # get day of the week from date given as list of [year, month, day]
-        day = datetime.date(date[0], date[1], date[2]).weekday()
+        day = datetime.date(date[0], date[1], date[2]).weekday() + 1
         
         # set month to 0 and day to day of the week
         # so its consistent with corresponding data in test set
         date[1] = 0
         date[2] = day
-        date = [start_h, start_m, 0] + date
+        #date = [start_h, start_m, 0] + date
+        date = [day*start_m]
 
         two_hours = self._load_h5_file(self.file_list[file_idx], sl=slice(start_hour, start_hour + 12 * 2 + 1))
         # convert 
         #two_hours = self.files[file_idx][start_hour:start_hour+24]
 
-        two_hours = two_hours[:,::self.sampling_height,::self.sampling_width,self.dim_start::self.dim_step]
+        random_int_x = random.randint(0, 300)
+        random_int_y = random.randint(0, 300)
+        two_hours = two_hours[:,random_int_x:random_int_x + 128, 
+                    random_int_y:random_int_y+128,self.dim_start::self.dim_step]
 
         if self.perm:
             dir_sel = random.randint(0,3)
             two_hours = two_hours[:,:,:,perm[dir_sel]]
         #input_data, output_data = prepare_test(two_hours)
-        dynamic_input, output_data = two_hours[:12], two_hours[[12, 13, 14, 17, 20, 23]]
+        dynamic_input, output_data = two_hours[:6], two_hours[[6,7,8,9,10,11]]
 
         # get static channels
         static_ch = self.static_dict[self.file_list[file_idx].parts[-3]]
