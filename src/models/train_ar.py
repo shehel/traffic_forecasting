@@ -248,11 +248,10 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
     # dynamic_input_std = torch.from_numpy(dynamic_input_std)[None, None, :, None, None].float().cuda()
 
     def prepare_batch_fn(batch, device, non_blocking):
-        dynamic, static, target  = batch
+        dynamic, static, target, dates  = batch
         dynamic = convert_tensor(dynamic, device, non_blocking)
         target = convert_tensor(target, device, non_blocking)
 
-        pdb.set_trace()
         dynamic = rearrange(dynamic, 'b c t h w -> (b h w) (c t)')
         target = rearrange(target, 'b c t h w -> (b h w) (c t)')
         #dynamic = (dynamic - dynamic_input_mean) / dynamic_input_std

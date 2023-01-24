@@ -12,7 +12,7 @@ network:
 
 dataset:
   _target_: src.data.dataset.T4CDataset
-  root_dir: "resid128"
+  root_dir: "7days"
   limit:
   use_npy: False
   sampling_height: 1
