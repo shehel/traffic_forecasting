@@ -1,14 +1,20 @@
 _target_: src.models.model.Model
 network:
-    _target_: src.models.unet.UNet
+    _target_: src.models.unet_q.UNetQ
     in_channels: 48 # 12*8+9
-    out_channels: 48 # 6*8
+    out_channels: 24 # 6*8
     depth: 2
     wf: 6
     padding: True
     up_mode: 'upconv'
     batch_norm: True
-    pos_emb: True
+    pos_emb: False
+    params:
+      q_lo_weight: 1
+      q_hi_weight: 1 
+      mse_weight: 1
+      q_lo: 0.05  
+      q_hi: 0.95
 
 dataset:
   _target_: src.data.dataset.T4CDataset
@@ -19,8 +25,8 @@ dataset:
   sampling_width: 1
   dim_start: 0
   dim_step: 1
-  output_start: 0
-  output_step: 1
+  output_start: 1
+  output_step: 2
   reduced: False
   single_channel:
   time_step: 

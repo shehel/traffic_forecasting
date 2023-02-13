@@ -150,6 +150,7 @@ class T4CDataset(Dataset):
         # convert 
         #two_hours = self.files[file_idx][start_hour:start_hour+24]
 
+        random.seed(0)
         random_int_x = random.randint(0, 300)
         random_int_y = random.randint(0, 300)
         two_hours = two_hours[:,random_int_x:random_int_x + 128, 
@@ -182,7 +183,7 @@ class T4CDataset(Dataset):
             reduc = tl.tenalg.multi_mode_dot(dynamic_input, self.factors, transpose=True)
             dynamic_input = torch.from_numpy(reduc).float()
 
-        return dynamic_input, static_ch, output_data, date
+        return dynamic_input, static_ch, output_data, date, [file_idx, start_hour]
 
     def _to_torch(self, data):
         data = torch.from_numpy(data)
@@ -190,7 +191,7 @@ class T4CDataset(Dataset):
         return data
 
 def train_collate_fn(batch):
-    dynamic_input_batch, static_input_batch, target_batch, date_batch = zip(*batch)
+    dynamic_input_batch, static_input_batch, target_batch, date_batch, file_info = zip(*batch)
     dynamic_input_batch = np.stack(dynamic_input_batch, axis=0)
     static_input_batch = np.stack(static_input_batch, axis=0)
     target_batch = np.stack(target_batch, axis=0)
@@ -203,5 +204,5 @@ def train_collate_fn(batch):
     target_batch = torch.from_numpy(target_batch).float()
 
 
-    return dynamic_input_batch, static_input_batch, target_batch, date_batch
+    return dynamic_input_batch, static_input_batch, target_batch, date_batch, file_info
 

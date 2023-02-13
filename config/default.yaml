@@ -4,5 +4,5 @@ core:
     - test
 
 defaults:
-  - model: full_waveletv2
+  - model: unet_q
   - train: default

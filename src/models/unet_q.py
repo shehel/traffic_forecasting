@@ -1,5 +1,5 @@
 """UNet implementation from https://github.com/jvanvugt/pytorch-unet.
-
+adapted for conformalized quantile regression
 Copied from https://github.com/mie-lab/traffic4cast/blob/aea6f90e8884c01689c84255c99e96d2b58dc470/models/unet.py with permission
 """
 #  Copyright 2021 Institute of Advanced Research in Artificial Intelligence (IARAI) GmbH.
@@ -23,10 +23,10 @@ import pdb
 from einops import rearrange
 
 
-class UNet(nn.Module):
+class UNetQ(nn.Module):
     def __init__(
-        self, in_channels=1, out_channels=2, depth=5, wf=6, padding=False, batch_norm=False, up_mode="upconv",
-        pos_emb=False
+        self, params, in_channels=1, out_channels=2, depth=5, wf=6, padding=False, batch_norm=False, up_mode="upconv",
+        pos_emb=False, 
     ):
         """
         Implementation of
@@ -50,11 +50,18 @@ class UNet(nn.Module):
                            learned upsampling.
                            'upsample' will use bilinear upsampling.
         """
-        super(UNet, self).__init__()
+        super(UNetQ, self).__init__()
         assert up_mode in ("upconv", "upsample")
         self.padding = padding
         self.depth = depth
         prev_channels = in_channels
+
+        self.q_lo = params["q_lo"]
+        self.q_hi = params["q_hi"]
+        self.params = params
+
+        
+
 
         if pos_emb:
             self.pos_model = Date2Vec()
@@ -71,6 +78,9 @@ class UNet(nn.Module):
             prev_channels = 2 ** (wf + i)
 
         self.last = nn.Conv2d(prev_channels, out_channels, kernel_size=1)
+        self.lower = nn.Conv2d(prev_channels, out_channels, kernel_size=1)
+        self.upper = nn.Conv2d(prev_channels, out_channels, kernel_size=1)
+
 
     def forward(self, x, *args, **kwargs):
         x, t  = x
@@ -88,7 +98,9 @@ class UNet(nn.Module):
         for i, up in enumerate(self.up_path):
             x = up(x, blocks[-i - 1])
         #prev = x
-        x=self.last(x)
+        #x=self.last(x)
+        x = torch.cat((self.lower(x).unsqueeze(1), self.last(x).unsqueeze(1), self.upper(x).unsqueeze(1)), dim=1)
+
         return x#, prev
 
 # helper functions

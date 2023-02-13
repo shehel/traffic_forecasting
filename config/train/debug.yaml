@@ -1,5 +1,4 @@
 random_seed: 123
-
 train_fraction: 1
 val_fraction: 0
 resume_checkpoint: 
