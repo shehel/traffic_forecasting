@@ -35,7 +35,7 @@ from ignite.handlers import Checkpoint
 from ignite.handlers import DiskSaver
 from ignite.handlers import global_step_from_engine
 from ignite.metrics import Loss
-from ignite.metrics import RunningAverage
+from ignite.metrics import RunningAverage, MeanSquaredError 
 from ignite.utils import convert_tensor
 
 from ignite.contrib.engines.common import save_best_model_by_val_score
@@ -201,34 +201,44 @@ def run_model(
         val_loader = idist.auto_dataloader(model.t_dataset, batch_size=cfg.train.dataloader.batch_size,
                                            num_workers=cfg.train.dataloader.num_workers, sampler=dev_sampler, collate_fn =train_collate_fn, pin_memory=False)
 
-        # Loss
-    loss = F.mse_loss
+    # Loss
+    loss = F.l1_loss
 
     logging.info("Going to run train_model.")
     # logging.info(system_status())
 
     checkpoints_dir = os.path.join(os.path.curdir, "checkpoints")
     
-    t_model = AR(48, 48)
+    if cfg.train.residual is None:
+        r_network = None
+    else:
+        r_task = Task.get_task(task_id=cfg.train.residual)
+        r_cfg = r_task.get_configuration_object("OmegaConf")
+        r_cfg = OmegaConf.create(r_cfg)
+        logging.info("Using residual model: %s", r_cfg)
+        r_model = instantiate(r_cfg.model)
+        model_path = r_task.artifacts['model_checkpoint'].get_local_copy()
+        model_state_dict = torch.load(model_path+'/'+os.listdir(model_path)[-1])#,map_location=torch.device('cpu'))
+        r_network = r_model.network
+        r_network = r_network.to('cuda')
+        r_network.load_state_dict(model_state_dict['train_model'], strict=False)
+        r_network.eval()
+
 
     # load model to predict t+1
-    train_task = Task.get_task(task_id="0008d142e02545b2b898206cb0be9cba")
-    model_path = train_task.artifacts['model_checkpoint'].get_local_copy()#"/data/t5chx.pt"
+    #train_task = Task.get_task(task_id="0008d142e02545b2b898206cb0be9cba")
+    #model_path = train_task.artifacts['model_checkpoint'].get_local_copy()#"/data/t5chx.pt"
     #model_state_dict = torch.load(model_path)
-    model_state_dict = torch.load(model_path+'/'+os.listdir(model_path)[-1])#,map_location=torch.device('cpu'))
-    t_model.load_state_dict(model_state_dict['train_model'], strict=False)
-    t_model = t_model.to('cuda')
-    t_model.eval()
 
     
-    train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_loader, model.network, checkpoints_dir, cfg, t_model)
+    train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_loader, model.network, checkpoints_dir, cfg, r_network)
     logging.info("End training of train_model %s on %s for %s epochs", model.network, device, cfg.train.epochs)
 
     # Upload checkpoint folder con
     task.upload_artifact(name='model_checkpoint', artifact_object=checkpoints_dir)
 
 def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_loader,
-                 train_model, checkpoints_dir, cfg, t_model):
+                 train_model, checkpoints_dir, cfg, r_network):
     # Validator
     is_static = cfg.train.transform.static
     if is_static:
@@ -257,13 +267,15 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
         target = convert_tensor(target, device, non_blocking)
         dates = convert_tensor(dates, device, non_blocking)
         #dynamic = (dynamic - dynamic_input_mean) / dynamic_input_std
-        pred = t_model.forward(rearrange(dynamic, 'b t c h w -> (b h w) (t c)'))
+        #pred = t_model.forward(rearrange(dynamic, 'b t c h w -> (b h w) (t c)'))
         # rearrange pred back to b t c h w where h = 128 w = 128 c = 8 and t = 6
-        pred = rearrange(pred, '(b h w) (t c) -> b t c h w', h=128, w=128, c=8, t=6)
-        target = target - pred
+        #pred = rearrange(pred, '(b h w) (t c) -> b t c h w', h=128, w=128, c=8, t=6)
         #pdb.set_trace()
         #target = dynamic[:, 11:12, 0:1, :, :] - target
+        # get channel size of dynamic
+        channels = dynamic.shape[2]
         dynamic = dynamic.reshape(-1, dynamic_channels, in_h, in_w)
+
         target = target.reshape(-1, out_channels, in_h, in_w)
         target = F.pad(target, pad=pad_tuple)
         static = convert_tensor(static, device, non_blocking)
@@ -273,11 +285,22 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
             input_batch = dynamic
         input_batch = F.pad(input_batch, pad=pad_tuple)
 
-        return [input_batch,dates], target
+        residual = r_network([input_batch, dates]) 
+        # reshape it to be b t c h w and take mean of t
+        residual = residual.reshape(-1, 6, channels, in_h, in_w)
+        #residual = residual.mean(dim=1)
+        # repeat mean 6 times and reshape it back to b (tc) h w
+        #residual = residual.repeat(1, 6, 1, 1, 1)
+        # set residual to be the mean of O
+        residual = residual[:,0,5,:,:]
+        residual = residual.reshape(-1, 1, in_h, in_w)
+        
+        return [input_batch,dates], target-residual
+        
 
-    validation_evaluator = create_supervised_evaluator(train_model, metrics={"val_loss": Loss(loss), "neg_val_loss": Loss(loss)*-1}, device=device, amp_mode=amp_mode,
+    validation_evaluator = create_supervised_evaluator(train_model, metrics={"val_loss": Loss(loss), "neg_val_loss": Loss(loss)*-1, "MSE": Loss(F.mse_loss)}, device=device, amp_mode=amp_mode,
                                                        prepare_batch=prepare_batch_fn)
-    train_evaluator = create_supervised_evaluator(train_model, metrics={"loss": Loss(loss)}, device=device, amp_mode=amp_mode,
+    train_evaluator = create_supervised_evaluator(train_model, metrics={"loss": Loss(loss), "MSE": Loss(F.mse_loss)}, device=device, amp_mode=amp_mode,
                                                   prepare_batch=prepare_batch_fn)
 
     # Trainer
@@ -318,13 +341,13 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
     #tb_logger.attach(trainer, log_handler=GradsScalarHandler(train_model), event_name=Events.ITERATION_COMPLETED(every=200))
     #tb_logger.attach(trainer, log_handler=WeightsScalarHandler(train_model), event_name=Events.ITERATION_COMPLETED(every=500))
     tb_logger.attach_output_handler(
-       train_evaluator, event_name=Events.EPOCH_COMPLETED, tag="train", metric_names=["loss"], global_step_transform=global_step_from_engine(trainer)
+       train_evaluator, event_name=Events.EPOCH_COMPLETED, tag="train", metric_names=["loss", "MSE"], global_step_transform=global_step_from_engine(trainer)
     )
     tb_logger.attach_output_handler(
         validation_evaluator,
         event_name=Events.EPOCH_COMPLETED,
         tag="validation",
-        metric_names=["val_loss"],
+        metric_names=["val_loss", "MSE"],
         global_step_transform=global_step_from_engine(trainer),
     )
     to_save = {"train_model": train_model, "optimizer": optimizer}
