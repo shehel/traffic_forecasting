@@ -144,14 +144,17 @@ class T4CDataset(Dataset):
         date[1] = 0
         date[2] = day
         #date = [start_h, start_m, 0] + date
-        date = [day*start_m]
+        if self.time_step == 'random':
+            # pick random integer between 0 and 6
+            self.time_step = random.randint(0, 5)
+        date = [self.time_step]#[day*start_m]
 
         two_hours = self._load_h5_file(self.file_list[file_idx], sl=slice(start_hour, start_hour + 12 * 2 + 1))
         # convert 
         #two_hours = self.files[file_idx][start_hour:start_hour+24]
 
-        random_int_x = 10#255#random.randint(0, 300)
-        random_int_y = 40#243#random.randint(0, 300)
+        random_int_x = random.randint(0, 300)
+        random_int_y = random.randint(0, 300)
         two_hours = two_hours[:,random_int_x:random_int_x + 128, 
                     random_int_y:random_int_y+128,self.dim_start::self.dim_step]
 
@@ -169,6 +172,7 @@ class T4CDataset(Dataset):
         if self.single_channel is not None:
             output_data = output_data[:,:,:,self.single_channel:self.single_channel+1]
 
+        
         if self.time_step is not None:
             output_data = output_data[self.time_step:self.time_step+1,:,:,:]
 

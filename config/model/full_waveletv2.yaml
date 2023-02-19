@@ -2,13 +2,13 @@ _target_: src.models.model.Model
 network:
     _target_: src.models.unet.UNet
     in_channels: 48 # 12*8+9
-    out_channels: 1 # 6*8
+    out_channels: 4 # 6*8
     depth: 2
     wf: 6
     padding: True
     up_mode: 'upconv'
     batch_norm: True
-    pos_emb: False
+    pos_emb: True
 
 dataset:
   _target_: src.data.dataset.T4CDataset
@@ -22,9 +22,9 @@ dataset:
   output_start: 1
   output_step: 2
   reduced: False
-  single_channel: 2
-  time_step: 0
-  perm: False
+  single_channel: 
+  time_step: random
+  perm: True
 
 valset: True
 valset_limit:

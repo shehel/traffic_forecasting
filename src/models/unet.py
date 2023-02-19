@@ -77,16 +77,16 @@ class UNet(nn.Module):
         t = self.pos_model(t) if exists(self.pos_model) else None
         blocks = []
         for i, down in enumerate(self.down_path):
-            if i == 0:
-                x = down(x, t)
-            else:
-                x = down(x)
+            #if i == 0:
+            x = down(x, t)
+            #else:
+            #x = down(x)
             if i != len(self.down_path) - 1:
                 blocks.append(x)
                 x = torch.nn.functional.max_pool2d(x, 2)
 
         for i, up in enumerate(self.up_path):
-            x = up(x, blocks[-i - 1])
+            x = up(x, blocks[-i - 1], t)
         x=self.last(x)
         return x
 
@@ -154,6 +154,7 @@ class UNetConvBlock(nn.Module):
         self.mlp = (nn.Sequential(
             nn.ReLU(), nn.Linear(time_emb_dim, out_size*2))
             if exists(time_emb_dim) else None)
+
 
         self.block1 = Block(in_size, out_size)
         self.block2 = Block(out_size, out_size)

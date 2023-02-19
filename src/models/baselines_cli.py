@@ -202,7 +202,7 @@ def run_model(
                                            num_workers=cfg.train.dataloader.num_workers, sampler=dev_sampler, collate_fn =train_collate_fn, pin_memory=False)
 
     # Loss
-    loss = F.l1_loss
+    loss = F.mse_loss
 
     logging.info("Going to run train_model.")
     # logging.info(system_status())
@@ -285,17 +285,17 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
             input_batch = dynamic
         input_batch = F.pad(input_batch, pad=pad_tuple)
 
-        residual = r_network([input_batch, dates]) 
-        # reshape it to be b t c h w and take mean of t
-        residual = residual.reshape(-1, 6, channels, in_h, in_w)
-        #residual = residual.mean(dim=1)
-        # repeat mean 6 times and reshape it back to b (tc) h w
-        #residual = residual.repeat(1, 6, 1, 1, 1)
-        # set residual to be the mean of O
-        residual = residual[:,0,5,:,:]
-        residual = residual.reshape(-1, 1, in_h, in_w)
+        # residual = r_network([input_batch, dates]) 
+        # # reshape it to be b t c h w and take mean of t
+        # residual = residual.reshape(-1, 6, channels, in_h, in_w)
+        # #residual = residual.mean(dim=1)
+        # # repeat mean 6 times and reshape it back to b (tc) h w
+        # #residual = residual.repeat(1, 6, 1, 1, 1)
+        # # set residual to be the mean of O
+        # residual = residual[:,0,5,:,:]
+        # residual = residual.reshape(-1, 1, in_h, in_w)
         
-        return [input_batch,dates], target-residual
+        return [input_batch,dates], target#-residual
         
 
     validation_evaluator = create_supervised_evaluator(train_model, metrics={"val_loss": Loss(loss), "neg_val_loss": Loss(loss)*-1, "MSE": Loss(F.mse_loss)}, device=device, amp_mode=amp_mode,
@@ -351,7 +351,7 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
         global_step_transform=global_step_from_engine(trainer),
     )
     to_save = {"train_model": train_model, "optimizer": optimizer}
-    checkpoint_handler = Checkpoint(to_save, DiskSaver(checkpoints_dir, create_dir=True, require_empty=False), n_saved=2)
+    #checkpoint_handler = Checkpoint(to_save, DiskSaver(checkpoints_dir, create_dir=True, require_empty=False), n_saved=2)
     checkpoint_handler = save_best_model_by_val_score(checkpoints_dir, validation_evaluator, to_save,
                                                       metric_name="neg_val_loss", n_saved=1, trainer=trainer)
     validation_evaluator.add_event_handler(Events.COMPLETED, checkpoint_handler)
