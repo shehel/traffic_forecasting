@@ -2,18 +2,18 @@ random_seed: 123
 train_fraction: 1
 val_fraction: 0
 resume_checkpoint:
-residual: 0e4025d9ded54281898b14ab4f0fa7c9
-epochs: 5
+residual: 
+epochs: 100
 parallel_backend: 
 n_process: 
 amp_mode:
 scaler:
 optimizer:
   lr: 0.01
-  weight_decay: 0.0001
+  weight_decay: 0.001
 dataloader:
   shuffle: True
-  batch_size: 1
+  batch_size: 16
   num_workers: 0
   train_eval: 1000
 transform:

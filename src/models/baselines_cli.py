@@ -262,10 +262,9 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
     # dynamic_input_std = torch.from_numpy(dynamic_input_std)[None, None, :, None, None].float().cuda()
 
     def prepare_batch_fn(batch, device, non_blocking):
-        dynamic, static, target, dates  = batch
+        dynamic, target = batch
         dynamic = convert_tensor(dynamic, device, non_blocking)
         target = convert_tensor(target, device, non_blocking)
-        dates = convert_tensor(dates, device, non_blocking)
         #dynamic = (dynamic - dynamic_input_mean) / dynamic_input_std
         #pred = t_model.forward(rearrange(dynamic, 'b t c h w -> (b h w) (t c)'))
         # rearrange pred back to b t c h w where h = 128 w = 128 c = 8 and t = 6
@@ -273,17 +272,17 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
         #pdb.set_trace()
         #target = dynamic[:, 11:12, 0:1, :, :] - target
         # get channel size of dynamic
-        channels = dynamic.shape[2]
-        dynamic = dynamic.reshape(-1, dynamic_channels, in_h, in_w)
+        # channels = dynamic.shape[2]
+        # dynamic = dynamic.reshape(-1, dynamic_channels, in_h, in_w)
 
-        target = target.reshape(-1, out_channels, in_h, in_w)
-        target = F.pad(target, pad=pad_tuple)
-        static = convert_tensor(static, device, non_blocking)
-        if is_static:
-            input_batch = torch.cat([dynamic, static], dim=1)
-        else:
-            input_batch = dynamic
-        input_batch = F.pad(input_batch, pad=pad_tuple)
+        # target = target.reshape(-1, out_channels, in_h, in_w)
+        # target = F.pad(target, pad=pad_tuple)
+        # static = convert_tensor(static, device, non_blocking)
+        # if is_static:
+        #     input_batch = torch.cat([dynamic, static], dim=1)
+        # else:
+        #     input_batch = dynamic
+        # input_batch = F.pad(input_batch, pad=pad_tuple)
 
         # residual = r_network([input_batch, dates]) 
         # # reshape it to be b t c h w and take mean of t
@@ -295,7 +294,7 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
         # residual = residual[:,0,5,:,:]
         # residual = residual.reshape(-1, 1, in_h, in_w)
         
-        return [input_batch,dates], target#-residual
+        return dynamic, target#-residual
         
 
     validation_evaluator = create_supervised_evaluator(train_model, metrics={"val_loss": Loss(loss), "neg_val_loss": Loss(loss)*-1, "MSE": Loss(F.mse_loss)}, device=device, amp_mode=amp_mode,

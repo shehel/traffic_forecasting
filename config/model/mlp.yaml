@@ -1,14 +1,10 @@
 _target_: src.models.model.Model
 network:
-    _target_: src.models.unet.UNet
-    in_channels: 48 # 12*8+9
+    _target_: src.models.mlp.MLP
+    in_channels: 2353 # 12*8+9
     out_channels: 4 # 6*8
-    depth: 2
-    wf: 6
-    padding: True
-    up_mode: 'upconv'
-    batch_norm: True
-    pos_emb: True
+    hidden_size: 128
+    dropout : 0.2
 
 dataset:
   _target_: src.data.dataset.T4CDataset
@@ -29,3 +25,4 @@ dataset:
 valset: True
 valset_limit:
 val_filter: "**/validation/*8ch.h5"
+

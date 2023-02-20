@@ -21,6 +21,9 @@ from pytorch_wavelets import DWTForward, DWTInverse
 
 from clearml import Task
 
+# import einops rearrange
+from einops import rearrange
+
 perm = [[0,1,2,3,4,5,6,7],
         [2,3,4,5,6,7,0,1],
         [4,5,6,7,0,1,2,3],
@@ -152,30 +155,51 @@ class T4CDataset(Dataset):
         two_hours = self._load_h5_file(self.file_list[file_idx], sl=slice(start_hour, start_hour + 12 * 2 + 1))
         # convert 
         #two_hours = self.files[file_idx][start_hour:start_hour+24]
+         
+        # get static channels
+        static_ch = self.static_dict[self.file_list[file_idx].parts[-3]]
 
-        random_int_x = random.randint(0, 300)
-        random_int_y = random.randint(0, 300)
-        two_hours = two_hours[:,random_int_x:random_int_x + 128, 
-                    random_int_y:random_int_y+128,self.dim_start::self.dim_step]
+
+        points = []
+
+        for i in range(100):
+            random_int_x = random.randint(10, 300)
+            random_int_y = random.randint(10, 300)
+
+            # while random_int_x and random_int_y position in static_ch are less than 5, recalculate random_int_x and random_int_y
+            while static_ch[0, random_int_x, random_int_y] < 20:
+                random_int_x = random.randint(10, 350)
+                random_int_y = random.randint(10, 320)
+
+            points.append((random_int_x, random_int_y))
+        
+        
+        # From two_hours, get random_int_x, random_int_y and 4 pixels around it for every point in points and store it as a numpy array
+        samples = np.stack([two_hours[:,x-3:x+4,y-3:y+4] for x,y in points], axis=0)
+
+        # index two_hours so that it includes random_int_x, random_int_y and 3 pixels around it
+        #two_hours = two_hours[:,random_int_x-3:random_int_x + 4,
+        #            random_int_y-3:random_int_y+4,self.dim_start::self.dim_step]
+
 
         if self.perm:
             dir_sel = random.randint(0,3)
             two_hours = two_hours[:,:,:,perm[dir_sel]]
         #input_data, output_data = prepare_test(two_hours)
-        dynamic_input, output_data = two_hours[:6], two_hours[[6,7,8,9,10,11]]
+        dynamic_input, output_data = samples[:,:6], samples[:,[6,7,8,9,10,11]]
 
-        # get static channels
-        static_ch = self.static_dict[self.file_list[file_idx].parts[-3]]
-
-        output_data = output_data[:,:,:,self.output_start::self.output_step]
+        output_data = output_data[:,:,3,3,self.output_start::self.output_step]
 
         if self.single_channel is not None:
             output_data = output_data[:,:,:,self.single_channel:self.single_channel+1]
 
         
         if self.time_step is not None:
-            output_data = output_data[self.time_step:self.time_step+1,:,:,:]
+            output_data = output_data[:, self.time_step:self.time_step+1,:]
 
+        # rearrange dynamic input and output using einops to be single channel
+        dynamic_input = rearrange(dynamic_input, 's t c x y ->  s (t c x y)')
+        output_data = rearrange(output_data, 's t c ->  s (t c)')
         # if self.transform is not None:
         #     dynamic_input = self.transform.pre_transform(dynamic_input)
         #     output_data = self.transform.pre_transform(output_data)
@@ -186,7 +210,12 @@ class T4CDataset(Dataset):
             reduc = tl.tenalg.multi_mode_dot(dynamic_input, self.factors, transpose=True)
             dynamic_input = torch.from_numpy(reduc).float()
 
-        return dynamic_input, static_ch, output_data, date
+
+        # replicate date a 100 times and concatenate with dynamic input at axis 1
+        dynamic_input = np.concatenate((np.tile(date, (100,1)), dynamic_input), axis=1)
+
+        # concatenate date to dynamic input using numpy
+        return dynamic_input, output_data
 
     def _to_torch(self, data):
         data = torch.from_numpy(data)
@@ -194,18 +223,21 @@ class T4CDataset(Dataset):
         return data
 
 def train_collate_fn(batch):
-    dynamic_input_batch, static_input_batch, target_batch, date_batch = zip(*batch)
+    dynamic_input_batch, target_batch= zip(*batch)
+    # stack dynamic_input_batch so that the shape is (batch size*100, -1)
     dynamic_input_batch = np.stack(dynamic_input_batch, axis=0)
-    static_input_batch = np.stack(static_input_batch, axis=0)
     target_batch = np.stack(target_batch, axis=0)
-    date_batch = np.stack(date_batch, axis=0)
-    date_batch = torch.from_numpy(date_batch).float()
-    dynamic_input_batch = np.moveaxis(dynamic_input_batch, source=4, destination=2)
+
+    # rearrange dynamic_input_batch so that the shape is (batch size*100, -1)
+    dynamic_input_batch = rearrange(dynamic_input_batch, 's t c ->  (s t) c')
+    target_batch = rearrange(target_batch, 's t c ->  (s t) c')
+
+
+
+    #dynamic_input_batch = np.moveaxis(dynamic_input_batch, source=4, destination=2)
     dynamic_input_batch = torch.from_numpy(dynamic_input_batch).float()
-    static_input_batch = torch.from_numpy(static_input_batch)
-    target_batch = np.moveaxis(target_batch, source=4, destination=2)
+    #target_batch = np.moveaxis(target_batch, source=4, destination=2)
     target_batch = torch.from_numpy(target_batch).float()
 
-
-    return dynamic_input_batch, static_input_batch, target_batch, date_batch
+    return dynamic_input_batch, target_batch
 
