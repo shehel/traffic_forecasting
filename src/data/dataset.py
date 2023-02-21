@@ -29,6 +29,63 @@ perm = [[0,1,2,3,4,5,6,7],
         [4,5,6,7,0,1,2,3],
         [6,7,0,1,2,3,4,5]
         ]
+filters = list(range(3, 50, 2))
+def extract_feats(pixel, dynamic_input, static_mask):
+    
+    point_x, point_y = pixel
+
+    feats = np.zeros(
+        (dynamic_input.shape[0], dynamic_input.shape[-1], len(filters)+1),
+        dtype=np.float32,
+    )
+    accum = np.zeros(
+        (dynamic_input.shape[0], dynamic_input.shape[-1]), dtype=np.float32
+    )
+
+    static_accum = 0
+    mask_sum = 0
+    for filter_idx, filter in enumerate(filters):
+        offset = int(np.floor(filter / 2))
+        feat = dynamic_input[
+            :,
+            point_x - offset : point_x + offset + 1,
+            point_y - offset : point_y + offset + 1,
+            :
+        ].copy()
+        
+        sum_feat = np.zeros(
+            (dynamic_input.shape[0], dynamic_input.shape[-1]), dtype=np.float32
+        )
+        # TODO this approach doesn't seem right
+        mask_feat = static_mask[
+            point_x - offset : point_x + offset + 1,
+            point_y - offset : point_y + offset + 1,
+        ]
+        
+        mask_sum = np.sum(mask_feat)
+        mask_sum = mask_sum - static_accum
+        static_accum = static_accum + mask_sum
+
+        # reducefeat = reduce(feat, 'f h w c -> f c', 'sum')/mask_feat
+        if mask_sum != 0:
+            #print (f'Accum is {accum[0,0]}')
+            feat = np.moveaxis(feat, -1 ,1)
+            feat_ch = feat.reshape(6, 8, -1).copy()
+            sum_feat = np.sum(feat_ch, axis=2)
+            #print (f'Total for filter {filter} is {sum_feat[0,0]}')
+            sum_feat = sum_feat - accum
+            #print (f'Total after subtracting accum is {sum_feat[0,0]}')
+            accum = accum + sum_feat
+            #sum_feat = sum_feat / mask_sum
+            #print (f'Total after dividing mask_sum {mask_sum} is {sum_feat[0,0]}')
+        feats[:,:,filter_idx] = sum_feat
+        # if np.count_nonzero(np.isnan(feats)) > 0:
+        #    pdb.set_trace()
+    # feats = feats.reshape(feats, 'k f c -> (k f c)')
+    
+    feats[:,:,filter_idx+1] = dynamic_input[:, point_x, point_y, :]
+    return feats
+
 class T4CDataset(Dataset):
     def __init__(
         self,
@@ -157,65 +214,36 @@ class T4CDataset(Dataset):
         #two_hours = self.files[file_idx][start_hour:start_hour+24]
          
         # get static channels
-        static_ch = self.static_dict[self.file_list[file_idx].parts[-3]]
+        static_ch = self.static_dict[self.file_list[file_idx].parts[-3]][0]
 
 
+        dynamic_input, output_data = two_hours[:6], two_hours[[6,7,8,9,10,11]]
         points = []
 
         for i in range(100):
-            random_int_x = random.randint(10, 300)
-            random_int_y = random.randint(10, 300)
+            random_int_x = random.randint(128, 300)
+            random_int_y = random.randint(128, 250)
 
             # while random_int_x and random_int_y position in static_ch are less than 5, recalculate random_int_x and random_int_y
-            while static_ch[0, random_int_x, random_int_y] < 20:
-                random_int_x = random.randint(10, 350)
-                random_int_y = random.randint(10, 320)
+            while static_ch[random_int_x, random_int_y] < 20:
+                random_int_x = random.randint(128, 300)
+                random_int_y = random.randint(128, 250)
 
-            points.append((random_int_x, random_int_y))
+            feats = extract_feats((random_int_x, random_int_y), dynamic_input, static_ch)
+            points.append(feats)
         
+        # stack points into numpy array
+        points = np.stack(points, axis=0)
+        inp = points[:,:,1::2,:24]
+        outp = points[:,0,1::2,24:]
+
+        inp = rearrange(inp, 's t c x->  s (t c x)')
+        outp = rearrange(outp, 's t c ->  s (t c)')
         
-        # From two_hours, get random_int_x, random_int_y and 4 pixels around it for every point in points and store it as a numpy array
-        samples = np.stack([two_hours[:,x-3:x+4,y-3:y+4] for x,y in points], axis=0)
-
-        # index two_hours so that it includes random_int_x, random_int_y and 3 pixels around it
-        #two_hours = two_hours[:,random_int_x-3:random_int_x + 4,
-        #            random_int_y-3:random_int_y+4,self.dim_start::self.dim_step]
-
-
-        if self.perm:
-            dir_sel = random.randint(0,3)
-            two_hours = two_hours[:,:,:,perm[dir_sel]]
-        #input_data, output_data = prepare_test(two_hours)
-        dynamic_input, output_data = samples[:,:6], samples[:,[6,7,8,9,10,11]]
-
-        output_data = output_data[:,:,3,3,self.output_start::self.output_step]
-
-        if self.single_channel is not None:
-            output_data = output_data[:,:,:,self.single_channel:self.single_channel+1]
-
-        
-        if self.time_step is not None:
-            output_data = output_data[:, self.time_step:self.time_step+1,:]
-
-        # rearrange dynamic input and output using einops to be single channel
-        dynamic_input = rearrange(dynamic_input, 's t c x y ->  s (t c x y)')
-        output_data = rearrange(output_data, 's t c ->  s (t c)')
-        # if self.transform is not None:
-        #     dynamic_input = self.transform.pre_transform(dynamic_input)
-        #     output_data = self.transform.pre_transform(output_data)
-            # static_ch = self.transform.pre_transform(static_ch, stack_time=False)
-        #input_data = torch.cat((input_data, static_ch), dim=0)
-        if self.reduced:
-            dynamic_input = dynamic_input.numpy()
-            reduc = tl.tenalg.multi_mode_dot(dynamic_input, self.factors, transpose=True)
-            dynamic_input = torch.from_numpy(reduc).float()
-
-
-        # replicate date a 100 times and concatenate with dynamic input at axis 1
-        dynamic_input = np.concatenate((np.tile(date, (100,1)), dynamic_input), axis=1)
+        #dynamic_input = np.concatenate((np.tile(date, (100,1)), dynamic_input), axis=1)
 
         # concatenate date to dynamic input using numpy
-        return dynamic_input, output_data
+        return inp, outp
 
     def _to_torch(self, data):
         data = torch.from_numpy(data)

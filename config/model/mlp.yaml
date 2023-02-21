@@ -1,7 +1,7 @@
 _target_: src.models.model.Model
 network:
     _target_: src.models.mlp.MLP
-    in_channels: 2353 # 12*8+9
+    in_channels: 576  # 12*8+9
     out_channels: 4 # 6*8
     hidden_size: 128
     dropout : 0.2
