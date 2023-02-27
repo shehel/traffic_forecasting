@@ -25,3 +25,4 @@ transform:
   - 0
   - 0
   static: False
+  normalize: True

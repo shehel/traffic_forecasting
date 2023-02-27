@@ -151,8 +151,8 @@ class T4CDataset(Dataset):
         #two_hours = self.files[file_idx][start_hour:start_hour+24]
 
         random.seed(0)
-        random_int_x = random.randint(0, 300)
-        random_int_y = random.randint(0, 300)
+        random_int_x = 10#random.randint(0, 300)
+        random_int_y = 40#random.randint(0, 300)
         two_hours = two_hours[:,random_int_x:random_int_x + 128, 
                     random_int_y:random_int_y+128,self.dim_start::self.dim_step]
 

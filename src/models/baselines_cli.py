@@ -216,9 +216,9 @@ def run_model(
     else:
         r_task = Task.get_task(task_id=cfg.train.residual)
         r_cfg = r_task.get_configuration_object("OmegaConf")
-        cfg = OmegaConf.create(cfg)
+        r_cfg = OmegaConf.create(r_cfg)
         logging.info("Using residual model: %s", r_cfg)
-        r_model = instantiate(cfg.model)
+        r_model = instantiate(r_cfg.model)
         model_path = r_task.artifacts['model_checkpoint'].get_local_copy()
         model_state_dict = torch.load(model_path+'/'+os.listdir(model_path)[0])#,map_location=torch.device('cpu'))
         r_network = r_model.network
@@ -226,23 +226,33 @@ def run_model(
         r_network.load_state_dict(model_state_dict['train_model'], strict=False)
         r_network.eval()
 
+    stats = {}
 
+    if cfg.train.transform.normalize is True:
+        logging.info("Loading normalization data")
+        stats["mean"] = np.load('../../../mean.npy')
+        stats["std"] = np.load('../../../std.npy')
+        stats["mean"] = torch.from_numpy(stats["mean"])[None, None, :, None, None].float()
+        stats["std"] = torch.from_numpy(stats["std"])[None, None, :, None, None].float()
+        stats["mean"] = convert_tensor(stats["mean"], device)
+        stats["std"] = convert_tensor(stats["std"], device)
     # load model to predict t+1
     #train_task = Task.get_task(task_id="0008d142e02545b2b898206cb0be9cba")
     #model_path = train_task.artifacts['model_checkpoint'].get_local_copy()#"/data/t5chx.pt"
     #model_state_dict = torch.load(model_path)
 
     
-    train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_loader, model.network, checkpoints_dir, cfg, r_network)
+    train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_loader, model.network, checkpoints_dir, cfg, r_network, stats)
     logging.info("End training of train_model %s on %s for %s epochs", model.network, device, cfg.train.epochs)
 
     # Upload checkpoint folder con
     task.upload_artifact(name='model_checkpoint', artifact_object=checkpoints_dir)
 
 def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_loader,
-                 train_model, checkpoints_dir, cfg, r_network):
+                 train_model, checkpoints_dir, cfg, r_network, stats):
     # Validator
     is_static = cfg.train.transform.static
+    is_normalize = cfg.train.transform.normalize
     if is_static:
         dynamic_channels = cfg.model.network.in_channels - 9
     else:
@@ -256,6 +266,8 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
     amp_mode = cfg.train.amp_mode
     scaler = cfg.train.scaler
     pad_tuple = tuple(cfg.train.transform.pad_tuple)
+
+    mean, std = stats["mean"], stats["std"]
 
     # dynamic_input_mean = np.load('data/processed/dynamic_input_mean.npy')
     # dynamic_input_std = np.load('data/processed/dynamic_input_std.npy')
@@ -276,6 +288,8 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
         #target = dynamic[:, 11:12, 0:1, :, :] - target
         # get channel size of dynamic
         channels = dynamic.shape[2]
+        dynamic = (dynamic - mean) / std
+        target = (dynamic - mean) / std
         dynamic = dynamic.reshape(-1, dynamic_channels, in_h, in_w)
 
         target = target.reshape(-1, out_channels, in_h, in_w)
@@ -287,13 +301,15 @@ def train_ignite(device, loss, optimizer, train_loader, train_eval_loader, val_l
             input_batch = dynamic
         input_batch = F.pad(input_batch, pad=pad_tuple)
 
-        # residual = r_network([input_batch, dates]) 
+        #residual = r_network([input_batch, dates]) 
         # # reshape it to be b t c h w and take mean of t
-        # residual = residual.reshape(-1, 6, channels, in_h, in_w)
+        #residual = residual.reshape(-1, 6, channels, in_h, in_w)
+        #residual = residual[:,:,1::2,:,:]
+        
         # residual = residual.mean(dim=1)
         # # repeat mean 6 times and reshape it back to b (tc) h w
         # residual = residual.repeat(1, 6, 1, 1, 1)
-        # residual = residual.reshape(-1, dynamic_channels, in_h, in_w)
+        #residual = residual.reshape(-1, 24, in_h, in_w)
         # # set residual to be the mean of O
         
         return [input_batch,dates], target

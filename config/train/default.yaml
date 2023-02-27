@@ -2,7 +2,7 @@ random_seed: 123
 train_fraction: 1
 val_fraction: 0
 resume_checkpoint:
-residual: 
+residual: 0e4025d9ded54281898b14ab4f0fa7c9
 epochs: 6
 parallel_backend: nccl
 n_process: 4
